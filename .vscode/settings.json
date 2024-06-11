@@ -1,0 +1,9 @@
+{
+  "python.analysis.typeCheckingMode": "basic",
+  "python.analysis.autoImportCompletions": false,
+  "editor.tabSize": 4,
+  "ruff.format.args": [
+    "--line-length=100"
+  ],
+  "python.REPL.enableREPLSmartSend": false
+}
