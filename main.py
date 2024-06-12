@@ -51,41 +51,42 @@ class CustomProtocolFTP(FTP):
 
     def parse_audio(self, audio_input_path: str, transcription_output_path: str):
         try:
-            # if input file is a .wav, convert it to an .ogg,
+            # If input file is a .wav, convert it to an .ogg,
             # because telegram's `sendVoice` command accepts only .mp3, .ogg & .m4a,
             # and also because a spectogram of a voice recording can be made only from
-            # an .ogg file encoded with libopus
+            # an .ogg file encoded with Opus
             if audio_input_path.endswith(".wav"):
                 print("Audio file is in .wav format. Converting to .ogg...")
                 audio_input_path = self.convert_wav_to_ogg(audio_input_path)
-            
-            # transcribe audio file into text
+
+            # Transcribe audio file into text
             print(f'Transcribing "{audio_input_path}" audio file...')
             model = whisper.load_model("base")
             result = model.transcribe(audio_input_path)
+            print(f"Trancribed audio:\n{result['text']}")
 
+            # Save transcribed text into a .txt file
             with open(transcription_output_path, "w") as file:
                 file.write(str(result["text"]))
 
-            print(f"Trancribed audio:\n{result['text']}")
-
+            # Send the audio file into the channel
             with open(audio_input_path, "rb") as audio:
                 payload = {
                     "chat_id": TELEGRAM_BOT_CHAT_ID,
                     "parse_mode": "HTML",
                 }
                 files = {"voice": audio.read()}
-                # response = requests.post(
-                requests.post(
+                response = requests.post(
                     f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendVoice",
                     data=payload,
                     files=files,
-                    # ).json()
                 )
 
-                # print(f"Result: \n{response}")
-
-            requests.post(
+                if not response.ok:
+                    print(f"Voice message delivery failed. Full response:\n{response.json()}")
+            
+            # Send the transcribed text to the channel
+            response = requests.post(
                 f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
                 data={
                     "chat_id": TELEGRAM_BOT_CHAT_ID,
@@ -94,6 +95,11 @@ class CustomProtocolFTP(FTP):
                 },
                 files=files,
             )
+
+            if not response.ok:
+                print(
+                    f"Message with the transcribed text delivery failed. Full response:\n{response.json()}"
+                )
 
         except Exception as ex:
             print(f"Exception catched: {ex} {ex.args}\n{traceback.format_exc()}")
