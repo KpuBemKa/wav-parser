@@ -1,3 +1,6 @@
+import threading
+import traceback
+
 from twisted.cred.checkers import FilePasswordDB
 from twisted.cred.portal import Portal
 from twisted.internet import reactor
@@ -5,30 +8,34 @@ from twisted.protocols.ftp import FTPFactory, FTPRealm, FTP
 from twisted.cred import credentials, error
 from twisted.internet import defer
 import whisper
-import threading
+import requests
+import os
+import pathlib
+
+from keys import TELEGRAM_BOT_TOKEN, TELEGRAM_BOT_CHAT_ID
 
 
 # the folder in which data from esps is stored
 RECORDINGS_FOLDER = "esp-recordings"
 
 
-class CustomFTP(FTP):
+class CustomProtocolFTP(FTP):
     def __init__(self) -> None:
         super().__init__()
 
     def ftp_STOR(self, path):
-        d = super(CustomFTP, self).ftp_STOR(path)
+        deff = super(CustomProtocolFTP, self).ftp_STOR(path)
 
-        def onStorComplete(d):
+        def onStorComplete(deff):
             if not self.should_transcribe_file(path):
-                return d
+                return deff
 
             folder_path: str = self.shell.filesystemRoot.path.decode() + "\\".join(
                 self.workingDirectory
             )
 
             audio_path = f"{folder_path}\\{path}"
-            output_path = f"{folder_path}\\{path.split('.')[:-1][0]}.txt"
+            output_path = f"{folder_path}\\{self.extract_file_name(path)}.txt"
 
             threading.Thread(
                 target=self.parse_audio,
@@ -36,32 +43,96 @@ class CustomFTP(FTP):
                 daemon=True,
             ).start()
 
-            return d
+            return deff
 
-        d.addCallback(onStorComplete)
+        deff.addCallback(onStorComplete)
 
-        return d
+        return deff
 
     def parse_audio(self, audio_input_path: str, transcription_output_path: str):
-        print(f'Transcribing "{audio_input_path}" audio file...')
-        model = whisper.load_model("base")
-        result = model.transcribe(audio_input_path)
+        try:
+            # if input file is a .wav, convert it to an .ogg,
+            # because telegram's `sendVoice` command accepts only .mp3, .ogg & .m4a,
+            # and also because a spectogram of a voice recording can be made only from
+            # an .ogg file encoded with libopus
+            if audio_input_path.endswith(".wav"):
+                print("Audio file is in .wav format. Converting to .ogg...")
+                audio_input_path = self.convert_wav_to_ogg(audio_input_path)
+            
+            # transcribe audio file into text
+            print(f'Transcribing "{audio_input_path}" audio file...')
+            model = whisper.load_model("base")
+            result = model.transcribe(audio_input_path)
 
-        file = open(transcription_output_path, "w")
-        file.write(str(result["text"]))
-        file.close()
+            with open(transcription_output_path, "w") as file:
+                file.write(str(result["text"]))
 
-        print(f"Trancribed audio:\n{result['text']}")
+            print(f"Trancribed audio:\n{result['text']}")
+
+            with open(audio_input_path, "rb") as audio:
+                payload = {
+                    "chat_id": TELEGRAM_BOT_CHAT_ID,
+                    "parse_mode": "HTML",
+                }
+                files = {"voice": audio.read()}
+                # response = requests.post(
+                requests.post(
+                    f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendVoice",
+                    data=payload,
+                    files=files,
+                    # ).json()
+                )
+
+                # print(f"Result: \n{response}")
+
+            requests.post(
+                f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+                data={
+                    "chat_id": TELEGRAM_BOT_CHAT_ID,
+                    "text": f"Transcribed audio:\n{result['text']}",
+                    "parse_mode": "HTML",
+                },
+                files=files,
+            )
+
+        except Exception as ex:
+            print(f"Exception catched: {ex} {ex.args}\n{traceback.format_exc()}")
+
+    def convert_wav_to_ogg(self, wav_path: str) -> str:
+        """
+        Converts a .wav file to an .ogg one, normalizes the volume,
+        and returns the path to the converted file
+        or a `None` in case of a failure
+        """
+        output_path: str = f"{self.extract_file_name(wav_path)}.ogg"
+
+        result: int = os.system(
+            f'ffmpeg -y -i {wav_path} -c:a libopus -b:a 32k -filter:a "speechnorm" {output_path}'
+        )
+
+        if result != 0:
+            raise SystemError(f"Unable to convert file '{wav_path}'")
+
+        # if the wav file was successfuly converted, no need to store it
+        pathlib.Path(wav_path).unlink()
+
+        return output_path
 
     def should_transcribe_file(self, file_name: str) -> bool:
         if self.shell.filesystemRoot.basename().decode() != RECORDINGS_FOLDER:
             return False
-        
-        file_extension = file_name.split(".")[-1:][0]
-        if file_extension != "wav" and file_extension != "mp3":
+
+        if not (file_name.endswith(".wav") or file_name.endswith(".mp3")):
             return False
 
         return True
+
+    def extract_file_name(self, file_name: str) -> str:
+        """
+        Extract only the file name (exclude the extension) from the file name
+        Example: `example_file.wav` -> `example_file`
+        """
+        return file_name.split(".")[:-1][0]
 
 
 class CustomDB(FilePasswordDB):
@@ -112,7 +183,7 @@ class CustomDB(FilePasswordDB):
 p = Portal(FTPRealm(anonymousRoot="./", userHome="./home"), [CustomDB("pass.dat")])
 
 f = FTPFactory(p)
-f.protocol = CustomFTP
+f.protocol = CustomProtocolFTP
 
 reactor.listenTCP(21, f)
 
