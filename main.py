@@ -1,5 +1,6 @@
 import threading
 import traceback
+import os
 
 from twisted.cred.checkers import FilePasswordDB
 from twisted.cred.portal import Portal
@@ -7,9 +8,9 @@ from twisted.internet import reactor
 from twisted.protocols.ftp import FTPFactory, FTPRealm, FTP
 from twisted.cred import credentials, error
 from twisted.internet import defer
+
 import whisper
 import requests
-import os
 import pathlib
 
 from keys import TELEGRAM_BOT_TOKEN, TELEGRAM_BOT_CHAT_ID
@@ -51,13 +52,13 @@ class CustomProtocolFTP(FTP):
 
     def parse_audio(self, audio_input_path: str, transcription_output_path: str):
         try:
-            # If input file is a .wav, convert it to an .ogg,
+            # If input file is a .wav, try to convert it to an .ogg,
             # because telegram's `sendVoice` command accepts only .mp3, .ogg & .m4a,
             # and also because a spectogram of a voice recording can be made only from
             # an .ogg file encoded with Opus
             if audio_input_path.endswith(".wav"):
-                print("Audio file is in .wav format. Converting to .ogg...")
-                audio_input_path = self.convert_wav_to_ogg(audio_input_path)
+                print("Audio file is in .wav format. Tying to converting it to .ogg...")
+                audio_input_path = self.try_convert_wav_to_ogg(audio_input_path)
 
             # Transcribe audio file into text
             print(f'Transcribing "{audio_input_path}" audio file...')
@@ -84,7 +85,7 @@ class CustomProtocolFTP(FTP):
 
                 if not response.ok:
                     print(f"Voice message delivery failed. Full response:\n{response.json()}")
-            
+
             # Send the transcribed text to the channel
             response = requests.post(
                 f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
@@ -104,25 +105,30 @@ class CustomProtocolFTP(FTP):
         except Exception as ex:
             print(f"Exception catched: {ex} {ex.args}\n{traceback.format_exc()}")
 
-    def convert_wav_to_ogg(self, wav_path: str) -> str:
+    def try_convert_wav_to_ogg(self, wav_path: str) -> str:
         """
-        Converts a .wav file to an .ogg one, normalizes the volume,
-        and returns the path to the converted file
-        or a `None` in case of a failure
+        Tries to convert a .wav file to an .ogg one and normalize the volume.
+
+        Returns the path to the converted file in case of success or
+        the path to the original file in case of errors
         """
-        output_path: str = f"{self.extract_file_name(wav_path)}.ogg"
+        try:
+            output_path: str = f"{self.extract_file_name(wav_path)}.ogg"
 
-        result: int = os.system(
-            f'ffmpeg -y -i {wav_path} -c:a libopus -b:a 32k -filter:a "speechnorm" {output_path}'
-        )
+            result: int = os.system(
+                f'ffmpeg -y -i {wav_path} -c:a libopus -b:a 32k -filter:a "speechnorm" {output_path}'
+            )
 
-        if result != 0:
-            raise SystemError(f"Unable to convert file '{wav_path}'")
+            if result != 0:
+                raise SystemError(f"Unable to convert file '{wav_path}'")
 
-        # if the wav file was successfuly converted, no need to store it
-        pathlib.Path(wav_path).unlink()
+            # if the wav file was successfuly converted, no need to store it
+            pathlib.Path(wav_path).unlink()
 
-        return output_path
+            return output_path
+        except SystemError as ex:
+            print(f"SystemError catched: {ex} {ex.args}\n{traceback.format_exc()}")
+            return wav_path
 
     def should_transcribe_file(self, file_name: str) -> bool:
         if self.shell.filesystemRoot.basename().decode() != RECORDINGS_FOLDER:
