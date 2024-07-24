@@ -1,0 +1,4 @@
+twisted~=22.2.0
+openai-whisper~=20231117
+pathlib~=1.0.1
+requests~=2.31.0
