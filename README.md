@@ -20,8 +20,8 @@ Note: not available on all GPUs. Check if available on yours
 
 1. `pip install packaging wheel`
 2. Ensure ninja is installed for faster compiling:
-2.1. Check Ninja Version: `ninja --version` 
-2.2 If not installed: `pip install ninja`
+  2.1. Check Ninja Version: `ninja --version` 
+  2.2 If not installed: `pip install ninja`
 3. `pip install flash-attn --no-build-isolation`
 
 Then you can check after success installation with:
