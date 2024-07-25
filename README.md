@@ -4,14 +4,8 @@ Receives wav files with speech from esp-recorder, and parses them into text
 # Prepare the python environment:
 ```.sh
 python3 -m venv venv
-```
-```.sh
 source venv/bin/activate
-```
-```.sh
 pip install -r .\requirements.txt
-```
-```.sh
 pip install --upgrade transformers optimum accelerate
 ```
 
