@@ -1,6 +1,7 @@
 import threading
 import traceback
 import os
+import time
 
 from twisted.cred.checkers import FilePasswordDB
 from twisted.cred.portal import Portal
@@ -9,9 +10,12 @@ from twisted.protocols.ftp import FTPFactory, FTPRealm, FTP
 from twisted.cred import credentials, error
 from twisted.internet import defer
 
-import whisper
 import requests
 import pathlib
+
+import torch
+from transformers import pipeline
+from transformers.utils import is_flash_attn_2_available
 
 from keys import TELEGRAM_BOT_TOKEN, TELEGRAM_BOT_CHAT_ID
 
@@ -31,12 +35,12 @@ class CustomProtocolFTP(FTP):
             if not self.should_transcribe_file(path):
                 return deff
 
-            folder_path: str = self.shell.filesystemRoot.path.decode() + "\\".join(
+            folder_path: str = self.shell.filesystemRoot.path.decode() + "/".join(
                 self.workingDirectory
             )
 
-            audio_path = f"{folder_path}\\{path}"
-            output_path = f"{folder_path}\\{self.extract_file_name(path)}.txt"
+            audio_path = f"{folder_path}/{path}"
+            output_path = f"{folder_path}/{self.extract_file_name(path)}.txt"
 
             threading.Thread(
                 target=self.parse_audio,
@@ -52,6 +56,36 @@ class CustomProtocolFTP(FTP):
 
     def parse_audio(self, audio_input_path: str, transcription_output_path: str):
         try:
+            print(f"audio path: {audio_input_path}")
+
+            # Transcribe audio file into text
+            print(f'Transcribing "{audio_input_path}" audio file...')
+            
+            start_time = time.time()
+            pipe = pipeline(
+                "automatic-speech-recognition",
+                model="openai/whisper-base", # select checkpoint from https://huggingface.co/openai/whisper-large-v3#model-details
+                torch_dtype=torch.float32,
+                device="cuda:0", # or mps for Mac devices
+                # model_kwargs={"attn_implementation": "flash_attention_2"} if is_flash_attn_2_available() else {"attn_implementation": "sdpa"},
+                model_kwargs={"attn_implementation": "sdpa"},
+            )
+
+            outputs = pipe(
+                audio_input_path,
+                chunk_length_s=30,
+                batch_size=24,
+                return_timestamps=False,
+            )
+            end_time = time.time()
+            
+            # print(f"Trancribed audio:\n{result['text']}")
+            print(f"Trancribed audio in {end_time - start_time} seconds:\n{outputs['text']}")
+
+            # Save transcribed text into a .txt file
+            with open(transcription_output_path, "w") as file:
+                file.write(str(outputs["text"]))
+            
             # If input file is a .wav, try to convert it to an .ogg,
             # because telegram's `sendVoice` command accepts only .mp3, .ogg & .m4a,
             # and also because a spectogram of a voice recording can be made only from
@@ -59,16 +93,6 @@ class CustomProtocolFTP(FTP):
             if audio_input_path.endswith(".wav"):
                 print("Audio file is in .wav format. Tying to converting it to .ogg...")
                 audio_input_path = self.try_convert_wav_to_ogg(audio_input_path)
-
-            # Transcribe audio file into text
-            print(f'Transcribing "{audio_input_path}" audio file...')
-            model = whisper.load_model("base")
-            result = model.transcribe(audio_input_path)
-            print(f"Trancribed audio:\n{result['text']}")
-
-            # Save transcribed text into a .txt file
-            with open(transcription_output_path, "w") as file:
-                file.write(str(result["text"]))
 
             # Send the audio file into the channel
             with open(audio_input_path, "rb") as audio:
@@ -91,7 +115,7 @@ class CustomProtocolFTP(FTP):
                 f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
                 data={
                     "chat_id": TELEGRAM_BOT_CHAT_ID,
-                    "text": f"Transcribed audio:\n{result['text']}",
+                    "text": f"Transcribed audio:\n{outputs['text']}",
                     "parse_mode": "HTML",
                 },
                 files=files,
@@ -116,7 +140,7 @@ class CustomProtocolFTP(FTP):
             output_path: str = f"{self.extract_file_name(wav_path)}.ogg"
 
             result: int = os.system(
-                f'ffmpeg -y -i {wav_path} -c:a libopus -b:a 32k -filter:a "speechnorm" {output_path}'
+                f'ffmpeg -y -i {wav_path} -c:a libopus -b:a 128k -filter:a "speechnorm" -ac 1 {output_path}'
             )
 
             if result != 0:
@@ -196,6 +220,7 @@ p = Portal(FTPRealm(anonymousRoot="./", userHome="./home"), [CustomDB("pass.dat"
 
 f = FTPFactory(p)
 f.protocol = CustomProtocolFTP
+f.passivePortRange = range(50_000, 50_010)
 
 reactor.listenTCP(21, f)
 
