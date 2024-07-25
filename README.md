@@ -11,7 +11,7 @@ pip install --upgrade transformers optimum accelerate
 
 ## Install `flash-attn` optimization option:
 Note: not available on all GPUs. Check if available on yours
-\n
+ 
 ```.sh
 pip install packaging wheel
 pip install ninja
