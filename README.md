@@ -18,11 +18,12 @@ pip install --upgrade transformers optimum accelerate
 ## Install `flash-attn` optimization option:
 Note: not available on all GPUs. Check if available on yours
 
-1. `pip install packaging wheel`
-2. Ensure ninja is installed for faster compiling:
-  1. Check Ninja Version: `ninja --version`
-  2 If not installed: `pip install ninja`
-3. `pip install flash-attn --no-build-isolation`
+
+```.sh
+pip install packaging wheel
+pip install ninja
+pip install flash-attn --no-build-isolation
+```
 
 Then you can check after success installation with:
 ```.py
