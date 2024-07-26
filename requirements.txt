@@ -1,7 +1,7 @@
+insanely-fast-whisper
 twisted>=22.2.0
 pathlib>=1.0.1
 requests>=2.31.0
-insanely-fast-whisper
 # openai-whisper
 # torch
 # torchvision

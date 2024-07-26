@@ -57,6 +57,10 @@ class CustomProtocolFTP(FTP):
     def parse_audio(self, audio_input_path: str, transcription_output_path: str):
         try:
             print(f"audio path: {audio_input_path}")
+            
+            if audio_input_path.endswith(".wav"):
+                print("Normalizing volume for speech...")
+                audio_input_path = self.try_normalize_for_speech(audio_input_path)
 
             # Transcribe audio file into text
             print(f'Transcribing "{audio_input_path}" audio file...')
@@ -64,9 +68,12 @@ class CustomProtocolFTP(FTP):
             start_time = time.time()
             pipe = pipeline(
                 "automatic-speech-recognition",
-                model="openai/whisper-base", # select checkpoint from https://huggingface.co/openai/whisper-large-v3#model-details
+                # model="openai/whisper-large-v2", # select checkpoint from https://huggingface.co/openai/whisper-large-v3#model-details
+                model="openai/whisper-medium", # select checkpoint from https://huggingface.co/openai/whisper-large-v3#model-details
+                # torch_dtype=torch.float16,
                 torch_dtype=torch.float32,
                 device="cuda:0", # or mps for Mac devices
+                # device="cpu", # or mps f1or Mac devices
                 # model_kwargs={"attn_implementation": "flash_attention_2"} if is_flash_attn_2_available() else {"attn_implementation": "sdpa"},
                 model_kwargs={"attn_implementation": "sdpa"},
             )
@@ -93,6 +100,8 @@ class CustomProtocolFTP(FTP):
             if audio_input_path.endswith(".wav"):
                 print("Audio file is in .wav format. Tying to converting it to .ogg...")
                 audio_input_path = self.try_convert_wav_to_ogg(audio_input_path)
+                
+            print(f"audio file path: {audio_input_path}")
 
             # Send the audio file into the channel
             with open(audio_input_path, "rb") as audio:
@@ -128,10 +137,37 @@ class CustomProtocolFTP(FTP):
 
         except Exception as ex:
             print(f"Exception catched: {ex} {ex.args}\n{traceback.format_exc()}")
+            
+    def try_normalize_for_speech(self, wav_path: str) -> str:
+        """
+        Tries to normalize volume for speech in the given .wav file.
+
+        Returns the path to the converted file in case of success or
+        the path to the original file in case of errors
+        """
+
+        try:
+            output_path: str = f"{self.extract_file_name(wav_path)}_normalized.wav"
+
+            result: int = os.system(
+                # f'ffmpeg -y -i {wav_path} -filter:a "speechnorm" -ac 1 -acodec pcm_s16le -ar 16000 -f wav {output_path}'
+                f'ffmpeg -y -i {wav_path} -af arnndn=m=mp.rnnn -af "volume=1.7" -acodec pcm_s16le -f wav {output_path}'
+            )
+
+            if result != 0:
+                raise SystemError(f"Unable to convert file '{wav_path}'")
+
+            # if the wav file was successfuly converted, no need to store it
+            # pathlib.Path(wav_path).unlink()
+
+            return output_path
+        except SystemError as ex:
+            print(f"SystemError catched: {ex} {ex.args}\n{traceback.format_exc()}")
+            return wav_path
 
     def try_convert_wav_to_ogg(self, wav_path: str) -> str:
         """
-        Tries to convert a .wav file to an .ogg one and normalize the volume.
+        Tries to convert a .wav file to an .ogg to enable Telegram spectogram.
 
         Returns the path to the converted file in case of success or
         the path to the original file in case of errors
@@ -140,14 +176,14 @@ class CustomProtocolFTP(FTP):
             output_path: str = f"{self.extract_file_name(wav_path)}.ogg"
 
             result: int = os.system(
-                f'ffmpeg -y -i {wav_path} -c:a libopus -b:a 128k -filter:a "speechnorm" -ac 1 {output_path}'
+                f'ffmpeg -y -i {wav_path} -c:a libopus -b:a 64k {output_path}'
             )
 
             if result != 0:
                 raise SystemError(f"Unable to convert file '{wav_path}'")
 
             # if the wav file was successfuly converted, no need to store it
-            pathlib.Path(wav_path).unlink()
+            # pathlib.Path(wav_path).unlink()
 
             return output_path
         except SystemError as ex:
