@@ -163,4 +163,4 @@ cython_debug/
 
 pass.dat
 keys.py
-/home/esp-recordings/
+home/*

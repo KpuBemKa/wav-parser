@@ -1,8 +1,3 @@
-import threading
-import traceback
-import os
-import time
-
 from twisted.cred.checkers import FilePasswordDB
 from twisted.cred.portal import Portal
 from twisted.internet import reactor
@@ -10,43 +5,43 @@ from twisted.protocols.ftp import FTPFactory, FTPRealm, FTP
 from twisted.cred import credentials, error
 from twisted.internet import defer
 
-import requests
 import pathlib
 
-import torch
-from transformers import pipeline
-from transformers.utils import is_flash_attn_2_available
+from modules.audio_transcriber import AudioTranscriber
+from modules.log import setup_custom_logger
+from settings import LOGGER_NAME, RECORDINGS_FOLDER, ALLOWED_EXTENSIONS
 
-from keys import TELEGRAM_BOT_TOKEN, TELEGRAM_BOT_CHAT_ID
-
-
-# the folder in which data from esps is stored
-RECORDINGS_FOLDER = "esp-recordings"
+logger = setup_custom_logger(LOGGER_NAME)
 
 
 class CustomProtocolFTP(FTP):
     def __init__(self) -> None:
         super().__init__()
+        self.transcriber = AudioTranscriber()
 
     def ftp_STOR(self, path):
         deff = super(CustomProtocolFTP, self).ftp_STOR(path)
 
         def onStorComplete(deff):
-            if not self.should_transcribe_file(path):
+            audio_path = pathlib.PurePath(self.shell.filesystemRoot.path.decode()) / self.workingDirectory / path
+            
+            if not self.should_transcribe_file(audio_path):
                 return deff
+            
+            self.transcriber.queue_audio_transcription(audio_path)
 
-            folder_path: str = self.shell.filesystemRoot.path.decode() + "/".join(
-                self.workingDirectory
-            )
+            # folder_path: str = self.shell.filesystemRoot.path.decode() + "/".join(
+            #     self.workingDirectory
+            # )
 
-            audio_path = f"{folder_path}/{path}"
-            output_path = f"{folder_path}/{self.extract_file_name(path)}.txt"
+            # audio_path = f"{folder_path}/{path}"
+            # output_path = f"{folder_path}/{self.extract_file_name(path)}.txt"
 
-            threading.Thread(
-                target=self.parse_audio,
-                args=[audio_path, output_path],
-                daemon=True,
-            ).start()
+            # threading.Thread(
+            #     target=self.parse_audio,
+            #     args=[audio_path, output_path],
+            #     daemon=True,
+            # ).start()
 
             return deff
 
@@ -54,121 +49,113 @@ class CustomProtocolFTP(FTP):
 
         return deff
 
-    def parse_audio(self, audio_input_path: str, transcription_output_path: str):
-        try:
-            print(f"audio path: {audio_input_path}")
-
-            # Transcribe audio file into text
-            print(f'Transcribing "{audio_input_path}" audio file...')
-            
-            start_time = time.time()
-            pipe = pipeline(
-                "automatic-speech-recognition",
-                model="openai/whisper-base", # select checkpoint from https://huggingface.co/openai/whisper-large-v3#model-details
-                torch_dtype=torch.float32,
-                device="cuda:0", # or mps for Mac devices
-                # model_kwargs={"attn_implementation": "flash_attention_2"} if is_flash_attn_2_available() else {"attn_implementation": "sdpa"},
-                model_kwargs={"attn_implementation": "sdpa"},
-            )
-
-            outputs = pipe(
-                audio_input_path,
-                chunk_length_s=30,
-                batch_size=24,
-                return_timestamps=False,
-            )
-            end_time = time.time()
-            
-            # print(f"Trancribed audio:\n{result['text']}")
-            print(f"Trancribed audio in {end_time - start_time} seconds:\n{outputs['text']}")
-
-            # Save transcribed text into a .txt file
-            with open(transcription_output_path, "w") as file:
-                file.write(str(outputs["text"]))
-            
-            # If input file is a .wav, try to convert it to an .ogg,
-            # because telegram's `sendVoice` command accepts only .mp3, .ogg & .m4a,
-            # and also because a spectogram of a voice recording can be made only from
-            # an .ogg file encoded with Opus
-            if audio_input_path.endswith(".wav"):
-                print("Audio file is in .wav format. Tying to converting it to .ogg...")
-                audio_input_path = self.try_convert_wav_to_ogg(audio_input_path)
-
-            # Send the audio file into the channel
-            with open(audio_input_path, "rb") as audio:
-                payload = {
-                    "chat_id": TELEGRAM_BOT_CHAT_ID,
-                    "parse_mode": "HTML",
-                }
-                files = {"voice": audio.read()}
-                response = requests.post(
-                    f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendVoice",
-                    data=payload,
-                    files=files,
-                )
-
-                if not response.ok:
-                    print(f"Voice message delivery failed. Full response:\n{response.json()}")
-
-            # Send the transcribed text to the channel
-            response = requests.post(
-                f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-                data={
-                    "chat_id": TELEGRAM_BOT_CHAT_ID,
-                    "text": f"Transcribed audio:\n{outputs['text']}",
-                    "parse_mode": "HTML",
-                },
-                files=files,
-            )
-
-            if not response.ok:
-                print(
-                    f"Message with the transcribed text delivery failed. Full response:\n{response.json()}"
-                )
-
-        except Exception as ex:
-            print(f"Exception catched: {ex} {ex.args}\n{traceback.format_exc()}")
-
-    def try_convert_wav_to_ogg(self, wav_path: str) -> str:
-        """
-        Tries to convert a .wav file to an .ogg one and normalize the volume.
-
-        Returns the path to the converted file in case of success or
-        the path to the original file in case of errors
-        """
-        try:
-            output_path: str = f"{self.extract_file_name(wav_path)}.ogg"
-
-            result: int = os.system(
-                f'ffmpeg -y -i {wav_path} -c:a libopus -b:a 128k -filter:a "speechnorm" -ac 1 {output_path}'
-            )
-
-            if result != 0:
-                raise SystemError(f"Unable to convert file '{wav_path}'")
-
-            # if the wav file was successfuly converted, no need to store it
-            pathlib.Path(wav_path).unlink()
-
-            return output_path
-        except SystemError as ex:
-            print(f"SystemError catched: {ex} {ex.args}\n{traceback.format_exc()}")
-            return wav_path
-
-    def should_transcribe_file(self, file_name: str) -> bool:
-        if self.shell.filesystemRoot.basename().decode() != RECORDINGS_FOLDER:
+    def should_transcribe_file(self, file_path: pathlib.PurePath) -> bool:
+        if file_path.parent.name != RECORDINGS_FOLDER:
             return False
 
-        if not (file_name.endswith(".wav") or file_name.endswith(".mp3")):
+        if file_path.suffix not in ALLOWED_EXTENSIONS:
             return False
 
         return True
 
-    def extract_file_name(self, file_name: str) -> str:
-        """
-        Extract only the file name (exclude the extension) from the file name
-        Example: `example_file.wav` -> `example_file`
-        """
-        return file_name.split(".")[:-1][0]
+    # def parse_audio(self, audio_input_path: str, transcription_output_path: str):
+    #     try:
+    #         print(f"audio path: {audio_input_path}")
+
+    #         # Transcribe audio file into text
+    #         print(f'Transcribing "{audio_input_path}" audio file...')
+
+    #         start_time = time.time()
+
+    #         outputs = self.pipe(
+    #             audio_input_path,
+    #             chunk_length_s=30,
+    #             batch_size=24,
+    #             return_timestamps=False,
+    #         )
+    #         end_time = time.time()
+
+    #         # print(f"Trancribed audio:\n{result['text']}")
+    #         print(f"Trancribed audio in {end_time - start_time} seconds:\n{outputs['text']}")
+
+    #         # Save transcribed text into a .txt file
+    #         with open(transcription_output_path, "w") as file:
+    #             file.write(str(outputs["text"]))
+
+    #         # If input file is a .wav, try to convert it to an .ogg,
+    #         # because telegram's `sendVoice` command accepts only .mp3, .ogg & .m4a,
+    #         # and also because a spectogram of a voice recording can be made only from
+    #         # an .ogg file encoded with Opus
+    #         if audio_input_path.endswith(".wav"):
+    #             print("Audio file is in .wav format. Tying to converting it to .ogg...")
+    #             audio_input_path = self.try_convert_wav_to_ogg(audio_input_path)
+
+    #         # Send the audio file into the channel
+    #         with open(audio_input_path, "rb") as audio:
+    #             payload = {
+    #                 "chat_id": TELEGRAM_BOT_CHAT_ID,
+    #                 "parse_mode": "HTML",
+    #             }
+    #             files = {"voice": audio.read()}
+    #             response = requests.post(
+    #                 f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendVoice",
+    #                 data=payload,
+    #                 files=files,
+    #             )
+
+    #             if not response.ok:
+    #                 print(f"Voice message delivery failed. Full response:\n{response.json()}")
+
+    #         # Send the transcribed text to the channel
+    #         response = requests.post(
+    #             f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+    #             data={
+    #                 "chat_id": TELEGRAM_BOT_CHAT_ID,
+    #                 "text": f"Transcribed audio:\n{outputs['text']}",
+    #                 "parse_mode": "HTML",
+    #             },
+    #             files=files,
+    #         )
+
+    #         if not response.ok:
+    #             print(
+    #                 f"Message with the transcribed text delivery failed. Full response:\n{response.json()}"
+    #             )
+
+    #     except Exception as ex:
+    #         print(f"Exception catched: {ex} {ex.args}\n{traceback.format_exc()}")
+
+    # def try_convert_wav_to_ogg(self, wav_path: str) -> str:
+    #     """
+    #     Tries to convert a .wav file to an .ogg one and normalize the volume.
+
+    #     Returns the path to the converted file in case of success or
+    #     the path to the original file in case of errors
+    #     """
+    #     try:
+    #         output_path: str = f"{self.extract_file_name(wav_path)}.ogg"
+
+    #         result: int = os.system(
+    #             f'ffmpeg -y -i {wav_path} -c:a libopus -b:a 128k -filter:a "speechnorm" -ac 1 {output_path}'
+    #         )
+
+    #         if result != 0:
+    #             raise SystemError(f"Unable to convert file '{wav_path}'")
+
+    #         # if the wav file was successfuly converted, no need to store it
+    #         pathlib.Path(wav_path).unlink()
+
+    #         return output_path
+    #     except SystemError as ex:
+    #         print(f"SystemError catched: {ex} {ex.args}\n{traceback.format_exc()}")
+    #         return wav_path
+
+    # def extract_file_name(self, file_name: str) -> str:
+    #     """
+    #     Extract only the file name (exclude the extension) from the file name
+    #     Example: `example_file.wav` -> `example_file`
+    #     """
+    #     return file_name.split(".")[:-1][0]
 
 
 class CustomDB(FilePasswordDB):

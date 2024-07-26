@@ -10,7 +10,7 @@ pip install --upgrade transformers optimum accelerate
 ```
 
 ## Install `flash-attn` optimization option:
-Note: not available on all GPUs. Check if available on yours
+Note: not available on all GPUs. Check if available on yours.
 
 Install it:
 ```.sh
@@ -24,4 +24,6 @@ Then you can check after success installation with:
 from transformers.utils import is_flash_attn_2_available
 print(is_flash_attn_2_available())
 ````
-Should return `True` if installed, `False` otherwise
+Should return `True` if installed, `False` otherwise.
+
+# Create a directory for every 
