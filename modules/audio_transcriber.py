@@ -33,7 +33,7 @@ class AudioTranscriber(metaclass=SingletonMeta):
 
         self.__queue = SimpleQueue()
         
-        threading.Thread(target=self.__main_thread, daemon=True)
+        threading.Thread(target=self.__main_thread, daemon=True).start()
 
     def queue_audio_transcription(self, audio_file_path: pathlib.PurePath) -> None:
         self.__queue.put(audio_file_path)
@@ -60,7 +60,7 @@ class AudioTranscriber(metaclass=SingletonMeta):
 
             start_time = time.time()
             outputs = self.__pipe(
-                audio_path,
+                audio_path.as_posix(),
                 chunk_length_s=30,
                 batch_size=24,
                 return_timestamps=False,
@@ -73,7 +73,7 @@ class AudioTranscriber(metaclass=SingletonMeta):
             logger.debug(f"Transcribed audio: {outputs['text']}")
 
             # Save transcribed text into a .txt file
-            pathlib.Path(audio_path.parent / audio_path.stem / ".txt").write_text(
+            pathlib.Path(audio_path.with_suffix(".txt")).write_text(
                 str(outputs["text"])
             )
 
@@ -107,7 +107,7 @@ class AudioTranscriber(metaclass=SingletonMeta):
                 f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
                 data={
                     "chat_id": TELEGRAM_BOT_CHAT_ID,
-                    "text": f"Transcribed audio for '{audio_path.stem}':\n{outputs['text']}",
+                    "text": f"Transcribed audio for '{audio_path.stem}':\n\"{outputs['text']}\"",
                     "parse_mode": "HTML",
                 },
                 files=files,

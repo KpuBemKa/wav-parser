@@ -6,14 +6,15 @@
   "configurations": [
     {
       "name": "Python",
-        "type": "debugpy",
-        "request": "launch",
-        "stopOnEntry": false,
-        "program": "./main.py",
-        "cwd": "${workspaceFolder}",
-        "env": {},
-        "envFile": "${workspaceFolder}/.env",
-        "justMyCode": false
+      "type": "debugpy",
+      "request": "launch",
+      "stopOnEntry": false,
+      "program": "./main.py",
+      "cwd": "${workspaceFolder}",
+      "env": {},
+      "envFile": "${workspaceFolder}/.env",
+      "justMyCode": false,
+      "sudo": true
     }
   ]
 }
