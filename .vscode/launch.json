@@ -14,7 +14,9 @@
       "env": {},
       "envFile": "${workspaceFolder}/.env",
       "justMyCode": false,
-      "sudo": true
+      "linux": {
+        "sudo": true
+      }
     }
   ]
 }
