@@ -164,6 +164,4 @@ cython_debug/
 pass.dat
 keys.py
 home/*
-!home/.gitkeep 
 logs/*
-!logs/.gitkeep 
