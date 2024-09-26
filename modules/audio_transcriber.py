@@ -1,3 +1,4 @@
+import subprocess
 import threading
 import time
 import logging
@@ -26,13 +27,13 @@ class AudioTranscriber(metaclass=SingletonMeta):
             "automatic-speech-recognition",
             model="openai/whisper-base",  # select checkpoint from https://huggingface.co/openai/whisper-large-v3#model-details
             torch_dtype=torch.float32,
-            device="cuda:0",  # or mps for Mac devices
+            # device="cuda:0",  # or mps for Mac devices
             # model_kwargs={"attn_implementation": "flash_attention_2"} if is_flash_attn_2_available() else {"attn_implementation": "sdpa"},
             model_kwargs={"attn_implementation": "sdpa"},
         )
 
         self.__queue = SimpleQueue()
-        
+
         threading.Thread(target=self.__main_thread, daemon=True).start()
 
     def queue_audio_transcription(self, audio_file_path: pathlib.PurePath) -> None:
@@ -72,11 +73,6 @@ class AudioTranscriber(metaclass=SingletonMeta):
             )
             logger.debug(f"Transcribed audio: {outputs['text']}")
 
-            # Save transcribed text into a .txt file
-            pathlib.Path(audio_path.with_suffix(".txt")).write_text(
-                str(outputs["text"])
-            )
-
             # If input file is a .wav, try to convert it to an .ogg,
             # because telegram's `sendVoice` command accepts only .mp3, .ogg & .m4a,
             # and also because a spectogram of a voice recording can be made only from
@@ -113,6 +109,9 @@ class AudioTranscriber(metaclass=SingletonMeta):
                 files=files,
             )
 
+            # Save transcribed text into a .txt file
+            pathlib.Path(audio_path.with_suffix(".txt")).write_bytes(str(outputs["text"]).encode("utf-8"))
+
             if not response.ok:
                 print(
                     f"Message with the transcribed text delivery failed. Full response:\n{response.json()}"
@@ -132,8 +131,22 @@ class AudioTranscriber(metaclass=SingletonMeta):
         try:
             output_path = wav_path.with_stem(f"{wav_path.stem}_normalized")
 
-            result: int = os.system(
-                f'ffmpeg -y -i {wav_path.as_posix()} -af arnndn=m=mp.rnnn -af "volume=1.7" -acodec pcm_s16le -f wav {output_path.as_posix()}'
+            result: int = subprocess.check_call(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-i",
+                    f"{wav_path.as_posix()}",
+                    "-af",
+                    "volume=1.7, arnndn=m=mp.rnnn",
+                    "-acodec",
+                    "pcm_s16le",
+                    "-f",
+                    "wav",
+                    f"{output_path.as_posix()}",
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.STDOUT,
             )
 
             if result != 0:
@@ -158,8 +171,20 @@ class AudioTranscriber(metaclass=SingletonMeta):
         try:
             output_path = wav_path.with_suffix(".ogg")
 
-            result: int = os.system(
-                f"ffmpeg -y -i {wav_path.as_posix()} -c:a libopus -b:a 64k {output_path.as_posix()}"
+            result: int = subprocess.check_call(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-i",
+                    f"{wav_path.as_posix()}",
+                    "-c:a",
+                    "libopus",
+                    "-b:a",
+                    "64k",
+                    f"{output_path.as_posix()}",
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.STDOUT,
             )
 
             if result != 0:

@@ -113,6 +113,6 @@ f.passivePortRange = range(50_000, 50_010)
 
 reactor.listenTCP(21, f)
 
-print("Starting...")
+print("Ready.")
 
 reactor.run()
