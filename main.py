@@ -105,14 +105,15 @@ class CustomDB(FilePasswordDB):
                 )
 
 
-p = Portal(FTPRealm(anonymousRoot="./", userHome="./home"), [CustomDB("pass.dat")])
+if __name__ == "__main__":
+    p = Portal(FTPRealm(anonymousRoot="./", userHome="./home"), [CustomDB("pass.dat")])
 
-f = FTPFactory(p)
-f.protocol = CustomProtocolFTP
-f.passivePortRange = range(50_000, 50_010)
+    f = FTPFactory(p)
+    f.protocol = CustomProtocolFTP
+    f.passivePortRange = range(50_000, 50_010)
 
-reactor.listenTCP(21, f)
+    reactor.listenTCP(21, f)
 
-print("Starting...")
+    print("Starting...")
 
-reactor.run()
+    reactor.run()
