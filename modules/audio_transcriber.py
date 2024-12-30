@@ -14,7 +14,7 @@ from transformers.utils import is_flash_attn_2_available
 
 from modules.singleton_meta import SingletonMeta
 from settings import LOGGER_NAME, DELETE_CONVERTED_FILES
-from keys import TELEGRAM_BOT_CHAT_ID, TELEGRAM_BOT_TOKEN
+from keys import ODOO_API2
 
 
 logger = logging.getLogger(LOGGER_NAME)
@@ -48,6 +48,26 @@ class AudioTranscriber(metaclass=SingletonMeta):
                 self.__transcribe_audio(self.__queue.get(timeout=10))
             except Empty:
                 continue
+            
+    def __forward_data(self, file_name: str, file_path: pathlib.Path, transcription: str):
+        # Define the headers (use your access token for authorization)
+        headers = {
+            "API-Key": API2,
+        }
+
+        # Prepare the data payload
+        data = {
+            "file_name": file_name,
+            "arbitrary_string": arbitrary_string,
+        }
+
+        # Prepare the files payload
+        files = {
+            "file": open(file_path, "rb"),  # Open the file in binary mode
+        }
+
+        # Send the POST request
+        response = requests.post(url, headers=headers, data=data, files=files)
 
     def __transcribe_audio(self, audio_path: pathlib.PurePath) -> None:
         try:
