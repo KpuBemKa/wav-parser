@@ -6,6 +6,7 @@ insanely-fast-whisper
 transformers
 optimum
 accelerate
+python-telegram-bot
 # openai-whisper
 # torch
 # torchvision
