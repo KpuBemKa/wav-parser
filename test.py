@@ -20,7 +20,9 @@ API2 = "b55ad831f7054ca6e6cbffad386b8eedd235a4b8"
 
 # File to upload
 # file_path = "./home/esp-recordings/esp-recorder_2024-05-19_11-15-18.ogg"
-file_path = "./home/esp-recordings/vsauce_test_audio.mp3"
+# file_path = "./home/esp-recordings/vsauce_test_audio.mp3"
+# file_path = "./home/esp-recordings/ru_input_wav.wav"
+file_path = "./home/esp-recordings/ru_input_wav_normalized.ogg"
 
 login_url = f"{URL}/web/login"
 upload_url = f"{URL}/recs/new_rec"

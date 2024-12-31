@@ -26,14 +26,17 @@ class AudioTranscriber(metaclass=SingletonMeta):
     def __init__(self) -> None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
         device_int = 0 if device == "cuda" else -1
-        logger.info(f"Running on {device}")
         torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
-            # model="openai/whisper-base",  # select checkpoint from https://huggingface.co/openai/whisper-large-v3#model-details
-            # torch_dtype=torch.float32,
-            # device="cuda:0",  # or mps for Mac devices
-            # model_kwargs={"attn_implementation": "flash_attention_2"} if is_flash_attn_2_available() else {"attn_implementation": "sdpa"},
-            # model_kwargs={"attn_implementation": "sdpa"},
-            
+        # attn_impl = "flash_attention_2" if is_flash_attn_2_available() else "spda"
+        attn_impl = "spda"
+
+        logger.info(f"Running on {device}, with attn_implementation: {attn_impl}")
+        # model="openai/whisper-base",  # select checkpoint from https://huggingface.co/openai/whisper-large-v3#model-details
+        # torch_dtype=torch.float32,
+        # device="cuda:0",  # or mps for Mac devices
+        # model_kwargs={"attn_implementation": "flash_attention_2"} if is_flash_attn_2_available() else {"attn_implementation": "sdpa"},
+        # model_kwargs={"attn_implementation": "sdpa"},
+
         self.__pipe = pipeline(
             "automatic-speech-recognition",
             model="openai/whisper-base",  # select checkpoint from https://huggingface.co/openai/whisper-large-v3#model-details,
@@ -44,7 +47,7 @@ class AudioTranscriber(metaclass=SingletonMeta):
             chunk_length_s=30,
             batch_size=24,
             return_timestamps=True,
-            model_kwargs={"attn_implementation": "flash_attention_2"},
+            model_kwargs={"attn_implementation": "sdpa"},
             device=device_int,
         )
 
@@ -53,7 +56,7 @@ class AudioTranscriber(metaclass=SingletonMeta):
         threading.Thread(target=self.__main_thread, daemon=True).start()
 
     def queue_audio_transcription(self, audio_file_path: pathlib.PurePath) -> None:
-        self.__queue.put(audio_file_path)
+        self.__queue.put(pathlib.Path(audio_file_path))
 
     def __main_thread(self) -> None:
         while True:
@@ -66,7 +69,7 @@ class AudioTranscriber(metaclass=SingletonMeta):
             except Empty:
                 continue
 
-    def __transcribe_audio(self, audio_path: pathlib.PurePath) -> None:
+    def __transcribe_audio(self, audio_path: pathlib.Path) -> None:
         try:
             # Transcribe audio file into text
             logger.info(f'Transcribing "{audio_path.as_posix()}" audio file...')
@@ -104,14 +107,14 @@ class AudioTranscriber(metaclass=SingletonMeta):
 
             self.__forward_data(
                 file_name=audio_path.name,
-                file_path=audio_path.as_posix(),
+                file_path=audio_path,
                 transcription=str(outputs["text"]),
             )
 
         except Exception as ex:
             print(f"Exception catched: {ex} {ex.args}\n{traceback.format_exc()}")
 
-    def __try_normalize_for_speech(self, wav_path: pathlib.PurePath) -> pathlib.PurePath:
+    def __try_normalize_for_speech(self, wav_path: pathlib.Path) -> pathlib.Path:
         """
         Tries to normalize volume for speech in the given .wav file.
 
@@ -119,76 +122,78 @@ class AudioTranscriber(metaclass=SingletonMeta):
         the path to the original file in case of errors
         """
 
-        try:
-            output_path = wav_path.with_stem(f"{wav_path.stem}_normalized")
+        output_path = wav_path.with_stem(f"{wav_path.stem}_normalized")
 
-            result: int = subprocess.check_call(
+        try:
+            result = subprocess.run(
                 [
                     "ffmpeg",
                     "-y",
                     "-i",
-                    f"{wav_path.as_posix()}",
+                    f"{wav_path.absolute().as_posix()}",
                     "-af",
                     "volume=1.7, arnndn=m=mp.rnnn",
                     "-acodec",
                     "pcm_s16le",
                     "-f",
                     "wav",
-                    f"{output_path.as_posix()}",
+                    f"{output_path.absolute().as_posix()}",
                 ],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.STDOUT,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=True,
             )
-
-            if result != 0:
-                raise SystemError(f"Unable to convert file '{wav_path}'")
-
-            if DELETE_CONVERTED_FILES:
-                # if the wav file was successfuly converted, no need to store it
-                pathlib.Path(wav_path).unlink()
-
-            return output_path
-        except SystemError as ex:
-            print(f"SystemError catched: {ex} {ex.args}\n{traceback.format_exc()}")
+        except subprocess.CalledProcessError as ex:
+            logger.error(f"Command failed with exit code: {ex.returncode}:\n{ex.stderr}")
             return wav_path
 
-    def __try_convert_wav_to_ogg(self, wav_path: pathlib.PurePath) -> pathlib.PurePath:
+        logger.info("Audio volume normalized for speech.")
+
+        if DELETE_CONVERTED_FILES:
+            # if the wav file was successfuly converted, no need to store it
+            pathlib.Path(wav_path).unlink()
+
+        return output_path
+
+    def __try_convert_wav_to_ogg(self, wav_path: pathlib.Path) -> pathlib.Path:
         """
         Tries to convert a .wav file to an .ogg one and normalize the volume.
 
         Returns the path to the converted file in case of success or
         the path to the original file in case of errors
         """
-        try:
-            output_path = wav_path.with_suffix(".ogg")
+        output_path = wav_path.with_stem(f"{wav_path.stem}_normalized")
 
-            result: int = subprocess.check_call(
+        try:
+            result = subprocess.run(
                 [
                     "ffmpeg",
                     "-y",
                     "-i",
-                    f"{wav_path.as_posix()}",
+                    f"{wav_path.absolute().as_posix()}",
                     "-c:a",
                     "libopus",
                     "-b:a",
                     "64k",
-                    f"{output_path.as_posix()}",
+                    f"{output_path.absolute().as_posix()}",
                 ],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.STDOUT,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=True,
             )
-
-            if result != 0:
-                raise SystemError(f"Unable to convert file '{wav_path}'")
-
-            if DELETE_CONVERTED_FILES:
-                # if the wav file was successfuly converted, no need to store it
-                pathlib.Path(wav_path).unlink()
-
-            return output_path
-        except SystemError as ex:
-            print(f"SystemError catched: {ex} {ex.args}\n{traceback.format_exc()}")
+        except subprocess.CalledProcessError as ex:
+            logger.error(f"Command failed with exit code: {ex.returncode}:\n{ex.stderr}")
             return wav_path
+        
+        logger.info("Audio file converted to .ogg")
+
+        if DELETE_CONVERTED_FILES:
+            # if the wav file was successfuly converted, no need to store it
+            pathlib.Path(wav_path).unlink()
+
+        return output_path
 
     def __forward_data(self, file_name: str, file_path: pathlib.Path, transcription: str):
         # Define the headers (use your access token for authorization)
@@ -199,12 +204,12 @@ class AudioTranscriber(metaclass=SingletonMeta):
         # Prepare the data payload
         data = {
             "file_name": file_name,
-            "arbitrary_string": transcription,
+            "transcription": transcription,
         }
 
         # Prepare the files payload
         files = {
-            "file": open(file_path, "rb"),  # Open the file in binary mode
+            "file": open(file_path.as_posix(), "rb"),  # Open the file in binary mode
         }
 
         # Send the POST request
