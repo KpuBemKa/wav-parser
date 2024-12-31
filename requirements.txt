@@ -3,6 +3,9 @@ pathlib>=1.0.1
 requests>=2.31.0
 concurrent-log-handler
 insanely-fast-whisper
+transformers
+optimum
+accelerate
 # openai-whisper
 # torch
 # torchvision
