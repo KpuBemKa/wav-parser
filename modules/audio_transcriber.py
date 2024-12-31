@@ -28,13 +28,15 @@ class AudioTranscriber(metaclass=SingletonMeta):
         # model_kwargs={"attn_implementation": "sdpa"},
 
         self.__queue = SimpleQueue()
-        self.__queue_lock = Lock()
+        self.__thread = threading.Thread(target=self.__main_thread, daemon=True)
 
-        threading.Thread(target=self.__main_thread, daemon=True).start()
+        # threading.Thread(target=self.__main_thread, daemon=True).start()
 
     def queue_audio_transcription(self, audio_file_path: pathlib.PurePath) -> None:
-        with self.__queue_lock:
-            self.__queue.put(pathlib.Path(audio_file_path))
+        if not self.__thread.is_alive():
+            self.__thread.start()
+        
+        self.__queue.put(pathlib.Path(audio_file_path))
 
     def __main_thread(self) -> None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -60,10 +62,7 @@ class AudioTranscriber(metaclass=SingletonMeta):
         logger.info(f"Running on {device}, with attn_implementation: {attn_impl}")
 
         while True:
-            with self.__queue_lock:
-                empty = self.__queue.empty()
-
-            if empty:
+            if self.__queue.empty():
                 time.sleep(1)
                 continue
 
