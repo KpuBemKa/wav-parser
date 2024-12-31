@@ -2,28 +2,38 @@ import subprocess
 import threading
 import time
 import logging
-import os
-from queue import SimpleQueue, Empty
 import traceback
-
 import requests
 import pathlib
-
 import torch
-from transformers import pipeline
-from transformers.utils import is_flash_attn_2_available
 
+from queue import SimpleQueue, Empty
+from transformers import pipeline
 
 from modules.singleton_meta import SingletonMeta
-from settings import LOGGER_NAME, DELETE_CONVERTED_FILES, ODOO_UPLOAD_ENDPOINT
+from settings import DELETE_CONVERTED_FILES, ODOO_UPLOAD_ENDPOINT
 from keys import ODOO_API_KEY
 
 
-logger = logging.getLogger(LOGGER_NAME)
+logger = logging.getLogger(__name__)
 
 
 class AudioTranscriber(metaclass=SingletonMeta):
     def __init__(self) -> None:
+        # model="openai/whisper-base",  # select checkpoint from https://huggingface.co/openai/whisper-large-v3#model-details
+        # torch_dtype=torch.float32,
+        # device="cuda:0",  # or mps for Mac devices
+        # model_kwargs={"attn_implementation": "flash_attention_2"} if is_flash_attn_2_available() else {"attn_implementation": "sdpa"},
+        # model_kwargs={"attn_implementation": "sdpa"},
+
+        self.__queue = SimpleQueue()
+
+        threading.Thread(target=self.__main_thread, daemon=True).start()
+
+    def queue_audio_transcription(self, audio_file_path: pathlib.PurePath) -> None:
+        self.__queue.put(pathlib.Path(audio_file_path))
+
+    def __main_thread(self) -> None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
         device_int = 0 if device == "cuda" else -1
         torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
@@ -31,11 +41,6 @@ class AudioTranscriber(metaclass=SingletonMeta):
         attn_impl = "spda"
 
         logger.info(f"Running on {device}, with attn_implementation: {attn_impl}")
-        # model="openai/whisper-base",  # select checkpoint from https://huggingface.co/openai/whisper-large-v3#model-details
-        # torch_dtype=torch.float32,
-        # device="cuda:0",  # or mps for Mac devices
-        # model_kwargs={"attn_implementation": "flash_attention_2"} if is_flash_attn_2_available() else {"attn_implementation": "sdpa"},
-        # model_kwargs={"attn_implementation": "sdpa"},
 
         self.__pipe = pipeline(
             "automatic-speech-recognition",
@@ -51,14 +56,6 @@ class AudioTranscriber(metaclass=SingletonMeta):
             device=device_int,
         )
 
-        self.__queue = SimpleQueue()
-
-        threading.Thread(target=self.__main_thread, daemon=True).start()
-
-    def queue_audio_transcription(self, audio_file_path: pathlib.PurePath) -> None:
-        self.__queue.put(pathlib.Path(audio_file_path))
-
-    def __main_thread(self) -> None:
         while True:
             if self.__queue.empty():
                 time.sleep(1)
@@ -186,7 +183,7 @@ class AudioTranscriber(metaclass=SingletonMeta):
         except subprocess.CalledProcessError as ex:
             logger.error(f"Command failed with exit code: {ex.returncode}:\n{ex.stderr}")
             return wav_path
-        
+
         logger.info("Audio file converted to .ogg")
 
         if DELETE_CONVERTED_FILES:

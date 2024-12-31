@@ -1,14 +1,14 @@
-import pathlib
-import asyncio
+import logging
 
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext
+from telegram.ext import Application, CommandHandler, CallbackContext, MessageHandler, filters
 
 from modules.audio_transcriber import AudioTranscriber
+from settings import TELEGRAM_AUDIO_DIR
 from keys import TELEGRAM_BOT_TOKEN
 
-# Path to store audio files
-AUDIO_DIR = pathlib.Path("./home/telegram-recordings/")
+
+logger = logging.getLogger(__name__)
 
 
 # Define the bot functionality
@@ -31,21 +31,25 @@ async def __handle_audio(update: Update, context: CallbackContext):
     file_info = await context.bot.get_file(file_id)
     file_name = f"{file_id}.ogg"  # Use .ogg for voice messages, modify as needed
 
+    reply_result = update.message.reply_text("Hello! Send me an audio message, and I'll store it as a file.")
+
     # Download the file
-    file_path = AUDIO_DIR / file_name
+    file_path = TELEGRAM_AUDIO_DIR / file_name
     await file_info.download_to_drive(file_path.absolute().as_posix())
 
     AudioTranscriber().queue_audio_transcription(file_path)
+    
+    await reply_result
 
 
-def start_bot():
+# Start the Telegram bot in a separate thread
+def start_telegram_bot():
+    # Initialize Application instead of Updater
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
     # Add handlers
     application.add_handler(CommandHandler("start", __start))
     application.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, __handle_audio))
 
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
-    
-if __name__ == "__main__":
-    start_bot()
+    # Start polling the bot
+    application.run_polling()
