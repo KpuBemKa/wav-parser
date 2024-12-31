@@ -110,9 +110,9 @@ if __name__ == "__main__":
 
     f = FTPFactory(p)
     f.protocol = CustomProtocolFTP
-    f.passivePortRange = range(50_000, 50_010)
+    f.passivePortRange = range(45_000, 45_010)
 
-    reactor.listenTCP(21, f)
+    reactor.listenTCP(20021, f)
 
     print("Starting...")
 
