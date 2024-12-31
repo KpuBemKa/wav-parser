@@ -1,7 +1,7 @@
 import pathlib
 import logging
 
-LOG_LEVEL = logging.DEBUG
+LOG_LEVEL = logging.INFO
 LOGGER_NAME = "root"
 # log message format
 LOG_FORMAT = "%(asctime)s - %(levelname)s - %(module)s - %(message)s"

@@ -4,11 +4,11 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, CallbackContext, MessageHandler, filters
 
 from modules.audio_transcriber import AudioTranscriber
-from settings import TELEGRAM_AUDIO_DIR
+from settings import TELEGRAM_AUDIO_DIR, LOGGER_NAME
 from keys import TELEGRAM_BOT_TOKEN
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(LOGGER_NAME)
 
 
 # Define the bot functionality
@@ -31,14 +31,14 @@ async def __handle_audio(update: Update, context: CallbackContext):
     file_info = await context.bot.get_file(file_id)
     file_name = f"{file_id}.ogg"  # Use .ogg for voice messages, modify as needed
 
-    reply_result = update.message.reply_text("Hello! Send me an audio message, and I'll store it as a file.")
+    reply_result = update.message.reply_text("Your audio has been successfuly received.")
 
     # Download the file
     file_path = TELEGRAM_AUDIO_DIR / file_name
     await file_info.download_to_drive(file_path.absolute().as_posix())
 
     AudioTranscriber().queue_audio_transcription(file_path)
-    
+
     await reply_result
 
 
@@ -50,6 +50,8 @@ def start_telegram_bot():
     # Add handlers
     application.add_handler(CommandHandler("start", __start))
     application.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, __handle_audio))
+
+    logger.info("Telegram bot has been started.")
 
     # Start polling the bot
     application.run_polling()

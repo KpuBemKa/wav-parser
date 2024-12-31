@@ -10,10 +10,10 @@ from twisted.internet import defer
 
 from modules.audio_transcriber import AudioTranscriber
 
-from settings import RECORDINGS_FOLDER, ALLOWED_EXTENSIONS
+from settings import RECORDINGS_FOLDER, ALLOWED_EXTENSIONS, LOGGER_NAME
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(LOGGER_NAME)
 
 
 class CustomProtocolFTP(FTP):
@@ -100,10 +100,10 @@ def start_ftp_server():
 
     f = FTPFactory(p)
     f.protocol = CustomProtocolFTP
-    f.passivePortRange = range(50_000, 50_010)
+    f.passivePortRange = range(45_000, 45_010)
 
-    reactor.listenTCP(21, f)
+    reactor.listenTCP(20021, f)
 
-    print("Starting...")
+    logger.info("FTP server has been started.")
 
     reactor.run()

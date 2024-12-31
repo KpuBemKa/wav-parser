@@ -9,13 +9,14 @@ import torch
 
 from queue import SimpleQueue, Empty
 from transformers import pipeline
+from threading import Lock
 
 from modules.singleton_meta import SingletonMeta
-from settings import DELETE_CONVERTED_FILES, ODOO_UPLOAD_ENDPOINT
+from settings import DELETE_CONVERTED_FILES, ODOO_UPLOAD_ENDPOINT, LOGGER_NAME
 from keys import ODOO_API_KEY
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(LOGGER_NAME)
 
 
 class AudioTranscriber(metaclass=SingletonMeta):
@@ -27,11 +28,13 @@ class AudioTranscriber(metaclass=SingletonMeta):
         # model_kwargs={"attn_implementation": "sdpa"},
 
         self.__queue = SimpleQueue()
+        self.__queue_lock = Lock()
 
         threading.Thread(target=self.__main_thread, daemon=True).start()
 
     def queue_audio_transcription(self, audio_file_path: pathlib.PurePath) -> None:
-        self.__queue.put(pathlib.Path(audio_file_path))
+        with self.__queue_lock:
+            self.__queue.put(pathlib.Path(audio_file_path))
 
     def __main_thread(self) -> None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -39,8 +42,6 @@ class AudioTranscriber(metaclass=SingletonMeta):
         torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
         # attn_impl = "flash_attention_2" if is_flash_attn_2_available() else "spda"
         attn_impl = "spda"
-
-        logger.info(f"Running on {device}, with attn_implementation: {attn_impl}")
 
         self.__pipe = pipeline(
             "automatic-speech-recognition",
@@ -55,9 +56,14 @@ class AudioTranscriber(metaclass=SingletonMeta):
             model_kwargs={"attn_implementation": "sdpa"},
             device=device_int,
         )
+        
+        logger.info(f"Running on {device}, with attn_implementation: {attn_impl}")
 
         while True:
-            if self.__queue.empty():
+            with self.__queue_lock:
+                empty = self.__queue.empty()
+
+            if empty:
                 time.sleep(1)
                 continue
 
@@ -87,14 +93,14 @@ class AudioTranscriber(metaclass=SingletonMeta):
             logger.info(
                 f"Audio '{audio_path.as_posix()}' transcribed in {end_time - start_time} seconds."
             )
-            logger.debug(f"Transcribed audio: {outputs['text']}")
+            logger.info(f"Transcribed audio: {outputs['text']}")
 
             # If input file is a .wav, try to convert it to an .ogg,
             # because telegram's `sendVoice` command accepts only .mp3, .ogg & .m4a,
             # and also because a spectogram of a voice recording can be made only from
             # an .ogg file encoded with Opus
             if audio_path.suffix == ".wav":
-                logger.debug("Audio file is in .wav format. Tying to converting it to .ogg...")
+                logger.info("Audio file is in .wav format. Tying to converting it to .ogg...")
                 audio_path = self.__try_convert_wav_to_ogg(audio_path)
 
             # Save transcribed text into a .txt file
