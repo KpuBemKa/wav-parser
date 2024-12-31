@@ -28,13 +28,13 @@ class AudioTranscriber(metaclass=SingletonMeta):
         # model_kwargs={"attn_implementation": "sdpa"},
 
         self.__queue = SimpleQueue()
-        self.__thread = threading.Thread(target=self.__main_thread, daemon=True)
+        self.__thread: threading.Thread | None = None
 
         # threading.Thread(target=self.__main_thread, daemon=True).start()
 
     def queue_audio_transcription(self, audio_file_path: pathlib.PurePath) -> None:
-        if not self.__thread.is_alive():
-            self.__thread.start()
+        if self.__thread is None:
+            self.__thread = threading.Thread(target=self.__main_thread, daemon=True).start()
         
         self.__queue.put(pathlib.Path(audio_file_path))
 
