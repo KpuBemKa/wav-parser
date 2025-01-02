@@ -1,6 +1,7 @@
 import logging
+import time
 
-from telegram import Update
+from telegram import Update, File
 from telegram.ext import Application, CommandHandler, CallbackContext, MessageHandler, filters
 
 from modules.audio_transcriber import AudioTranscriber
@@ -13,7 +14,7 @@ logger = logging.getLogger(LOGGER_NAME)
 
 # Define the bot functionality
 async def __start(update: Update, context: CallbackContext):
-    await update.message.reply_text("Hello! Send me an audio message, and I'll store it as a file.")
+    await update.message.reply_text("Hello! Send me an audio message, and I'll store it.")
 
 
 async def __handle_audio(update: Update, context: CallbackContext):
@@ -23,27 +24,56 @@ async def __handle_audio(update: Update, context: CallbackContext):
     # Get the audio file
     file = update.message.audio or update.message.voice
 
+    # Check if an audio has been uploaded
     if file is None:
-        await update.message.reply_text("I can accept only audio messages.")
+        await update.message.reply_text("Sorry, I can accept only audio messages.")
         return
 
-    file_id = file.file_id
-    file_info = await context.bot.get_file(file_id)
-    file_name = f"{file_id}.ogg"  # Use .ogg for voice messages, modify as needed
+    # Start the file download
+    file_info_await = context.bot.get_file(file.file_id)
 
-    reply_result = update.message.reply_text("Your audio has been successfuly received.")
+    # Get file extension
+    if update.message.document:
+        if update.message.document.file_name:
+            file_name = update.message.document.file_name
+            file_ext = file_name[: file_name.rfind(".")]
+
+    # Check if file extension is supported
+    if file_ext not in [".wav", ".ogg", ".mp3"]:
+        await update.message.reply_text(f"Sorry, file type {file_ext} is not supported.")
+        return
+
+    # Get sender's username
+    if update.message.from_user:
+        username = update.message.from_user.username
+
+    # Make username anonymous if no username was found
+    if username is None:
+        username = "Anonymous"
+
+    # Make the new file name
+    new_file_name = f"tg@{username}_{time.time()}.{file_ext}"
+
+    # Wait for file info to be received
+    file_info: File = await file_info_await
+
+    # Reply to the user that his audio has been received
+    reply_await = update.message.reply_text("Your audio has been successfuly received.")
 
     # Download the file
-    file_path = TELEGRAM_AUDIO_DIR / file_name
+    file_path = TELEGRAM_AUDIO_DIR / new_file_name
     await file_info.download_to_drive(file_path.absolute().as_posix())
 
+    # Transcribe it, and upload it
     AudioTranscriber().queue_audio_transcription(file_path)
 
-    await reply_result
+    # Wait for the reply to be delivered
+    await reply_await
 
 
-# Start the Telegram bot in a separate thread
 def start_telegram_bot():
+    """Starts the Telegram bot in a blocking manner"""
+
     # Initialize Application instead of Updater
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 

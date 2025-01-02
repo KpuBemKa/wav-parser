@@ -75,6 +75,8 @@ class AudioTranscriber(metaclass=SingletonMeta):
         try:
             # Transcribe audio file into text
             logger.info(f'Transcribing "{audio_path.as_posix()}" audio file...')
+            
+            file_name = audio_path.name
 
             if audio_path.suffix == ".wav":
                 print("Normalizing volume for speech...")
@@ -108,7 +110,7 @@ class AudioTranscriber(metaclass=SingletonMeta):
             )
 
             self.__forward_data(
-                file_name=audio_path.name,
+                file_name=f"{file_name}{audio_path.suffix}",
                 file_path=audio_path,
                 transcription=str(outputs["text"]),
             )
