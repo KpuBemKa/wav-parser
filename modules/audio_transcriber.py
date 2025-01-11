@@ -47,14 +47,15 @@ class AudioTranscriber(metaclass=SingletonMeta):
 
         self.__pipe = pipeline(
             "automatic-speech-recognition",
-            model="openai/whisper-base",  # select checkpoint from https://huggingface.co/openai/whisper-large-v3#model-details,
+            # model="openai/whisper-base",  # select checkpoint from https://huggingface.co/openai/whisper-large-v3#model-details,
+            model="openai/whisper-large-v3-turbo",
             # tokenizer=processor.tokenizer,
             # feature_extractor=processor.feature_extractor,
             max_new_tokens=128,
             torch_dtype=torch_dtype,
             chunk_length_s=60,
             batch_size=4,
-            return_timestamps=True,
+            return_timestamps=False,
             model_kwargs={"attn_implementation": "sdpa"},
             device=device_int,
         )
@@ -85,9 +86,6 @@ class AudioTranscriber(metaclass=SingletonMeta):
             start_time = time.time()
             outputs = self.__pipe(
                 audio_path.as_posix(),
-                chunk_length_s=30,
-                batch_size=24,
-                return_timestamps=False,
             )
             end_time = time.time()
 
@@ -110,7 +108,7 @@ class AudioTranscriber(metaclass=SingletonMeta):
             )
 
             self.__forward_data(
-                file_name=f"{file_name}{audio_path.suffix}",
+                file_name=f"{file_name}",
                 file_path=audio_path,
                 transcription=str(outputs["text"]),
             )

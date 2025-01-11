@@ -32,15 +32,21 @@ async def __handle_audio(update: Update, context: CallbackContext):
     # Start the file download
     file_info_await = context.bot.get_file(file.file_id)
 
-    # Get file extension
-    if update.message.document:
-        if update.message.document.file_name:
-            file_name = update.message.document.file_name
-            file_ext = file_name[: file_name.rfind(".")]
+    if update.message.audio:
+        # If file is an audio file
+        file_name = update.message.audio.file_name
+    else:
+        # If file is a voice message
+        file_name = "voice.ogg"
+
+    if file_name is None:
+        await update.message.reply_text("Sorry, I can't process this file.")
+        return
 
     # Check if file extension is supported
+    file_ext = file_name[file_name.rfind(".") :]
     if file_ext not in [".wav", ".ogg", ".mp3"]:
-        await update.message.reply_text(f"Sorry, file type {file_ext} is not supported.")
+        await update.message.reply_text(f"Sorry, file type '{file_ext}' is not supported.")
         return
 
     # Get sender's username
@@ -52,7 +58,7 @@ async def __handle_audio(update: Update, context: CallbackContext):
         username = "Anonymous"
 
     # Make the new file name
-    new_file_name = f"tg@{username}_{time.time()}.{file_ext}"
+    new_file_name = f"tg@{username}_{int(time.time())}{file_ext}"
 
     # Wait for file info to be received
     file_info: File = await file_info_await
