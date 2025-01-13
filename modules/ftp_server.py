@@ -96,7 +96,7 @@ class CustomDB(FilePasswordDB):
 
 # Start the FTP server
 def start_ftp_server():
-    p = Portal(FTPRealm(anonymousRoot="./", userHome="./home"), [CustomDB("pass.dat")])
+    p = Portal(FTPRealm(anonymousRoot="./", userHome="./home"), [CustomDB("static/pass.dat")])
 
     f = FTPFactory(p)
     f.protocol = CustomProtocolFTP
