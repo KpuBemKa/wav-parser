@@ -15,7 +15,8 @@ logger__ = logging.getLogger(LOGGER_NAME)
 
 # Define the bot functionality
 async def __start(update: Update, context: CallbackContext):
-    await update.message.reply_text(bot_replies.START_REPLY)
+    with open(bot_replies.START_ATTACHEMENT_PATH, "rb") as image:
+        await update.message.reply_photo(image, caption=bot_replies.START_REPLY)
 
 
 async def __handle_audio(update: Update, context: CallbackContext):

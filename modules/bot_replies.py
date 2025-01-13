@@ -3,6 +3,7 @@ START_REPLY = (
     "Just send me a Voice Note 🎙 with your comments what you liked or did not like about this place and get a guaranteed reward 🏆\n\n"
     "Press the microphone and speak in your native language 💬"
 )
+START_ATTACHEMENT_PATH = "static/start-attachement.jpg"
 
 ATTACHEMENT_DENIED = "Sorry, I can accept only Voice Notes"
 FILETYPE_DENIED = "Sorry, I can accept only Voice Notes"
