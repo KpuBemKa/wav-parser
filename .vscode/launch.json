@@ -14,6 +14,7 @@
       "cwd": "${workspaceFolder}",
       "env": {},
       "envFile": "${workspaceFolder}/.env",
+      "justMyCode": false
     }
   ]
 }

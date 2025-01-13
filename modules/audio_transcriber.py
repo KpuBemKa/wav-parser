@@ -19,6 +19,13 @@ from keys import ODOO_API_KEY
 logger = logging.getLogger(LOGGER_NAME)
 
 
+FAST_WHISPER_ARGS = {
+    #"language": "en",
+    #"task": "translate",
+    "max_new_tokens": 384,
+}
+
+
 class AudioTranscriber(metaclass=SingletonMeta):
     def __init__(self) -> None:
         # model="openai/whisper-base",  # select checkpoint from https://huggingface.co/openai/whisper-large-v3#model-details
@@ -35,7 +42,7 @@ class AudioTranscriber(metaclass=SingletonMeta):
     def queue_audio_transcription(self, audio_file_path: pathlib.PurePath) -> None:
         if self.__thread is None:
             self.__thread = threading.Thread(target=self.__main_thread, daemon=True).start()
-        
+
         self.__queue.put(pathlib.Path(audio_file_path))
 
     def __main_thread(self) -> None:
@@ -49,17 +56,19 @@ class AudioTranscriber(metaclass=SingletonMeta):
             "automatic-speech-recognition",
             # model="openai/whisper-base",  # select checkpoint from https://huggingface.co/openai/whisper-large-v3#model-details,
             model="openai/whisper-large-v3-turbo",
-            # tokenizer=processor.tokenizer,
+            #tokenizer=processor.tokenizer,
             # feature_extractor=processor.feature_extractor,
-            max_new_tokens=128,
+            # task=translate,
             torch_dtype=torch_dtype,
-            chunk_length_s=60,
-            batch_size=4,
-            return_timestamps=False,
+            chunk_length_s=30,
+            batch_size=1,
+            return_timestamps=True,
             model_kwargs={"attn_implementation": "sdpa"},
             device=device_int,
+            # max_new_tokens=384,
+            generate_kwargs=FAST_WHISPER_ARGS,
         )
-        
+
         logger.info(f"Running on {device}, with attn_implementation: {attn_impl}")
 
         while True:
@@ -76,7 +85,7 @@ class AudioTranscriber(metaclass=SingletonMeta):
         try:
             # Transcribe audio file into text
             logger.info(f'Transcribing "{audio_path.as_posix()}" audio file...')
-            
+
             file_name = audio_path.name
 
             if audio_path.suffix == ".wav":
@@ -86,6 +95,7 @@ class AudioTranscriber(metaclass=SingletonMeta):
             start_time = time.time()
             outputs = self.__pipe(
                 audio_path.as_posix(),
+                # language='en',
             )
             end_time = time.time()
 

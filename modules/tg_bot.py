@@ -4,21 +4,23 @@ import time
 from telegram import Update, File
 from telegram.ext import Application, CommandHandler, CallbackContext, MessageHandler, filters
 
+import modules.bot_replies as bot_replies
 from modules.audio_transcriber import AudioTranscriber
 from settings import TELEGRAM_AUDIO_DIR, LOGGER_NAME
 from keys import TELEGRAM_BOT_TOKEN
 
 
-logger = logging.getLogger(LOGGER_NAME)
+logger__ = logging.getLogger(LOGGER_NAME)
 
 
 # Define the bot functionality
 async def __start(update: Update, context: CallbackContext):
-    await update.message.reply_text("Hello! Send me an audio message, and I'll store it.")
+    await update.message.reply_text(bot_replies.START_REPLY)
 
 
 async def __handle_audio(update: Update, context: CallbackContext):
     if update.message is None:
+        # logger__.debug("0")
         return
 
     # Get the audio file
@@ -26,7 +28,8 @@ async def __handle_audio(update: Update, context: CallbackContext):
 
     # Check if an audio has been uploaded
     if file is None:
-        await update.message.reply_text("Sorry, I can accept only audio messages.")
+        # logger__.debug("1")
+        await update.message.reply_text(bot_replies.ATTACHEMENT_DENIED)
         return
 
     # Start the file download
@@ -40,13 +43,15 @@ async def __handle_audio(update: Update, context: CallbackContext):
         file_name = "voice.ogg"
 
     if file_name is None:
-        await update.message.reply_text("Sorry, I can't process this file.")
+        # logger__.debug("2")
+        await update.message.reply_text(bot_replies.ATTACHEMENT_DENIED)
         return
 
     # Check if file extension is supported
     file_ext = file_name[file_name.rfind(".") :]
     if file_ext not in [".wav", ".ogg", ".mp3"]:
-        await update.message.reply_text(f"Sorry, file type '{file_ext}' is not supported.")
+        # logger__.debug("3")
+        await update.message.reply_text(f"{bot_replies.ATTACHEMENT_DENIED}{file_ext}")
         return
 
     # Get sender's username
@@ -64,7 +69,7 @@ async def __handle_audio(update: Update, context: CallbackContext):
     file_info: File = await file_info_await
 
     # Reply to the user that his audio has been received
-    reply_await = update.message.reply_text("Your audio has been successfuly received.")
+    reply_await = update.message.reply_text(bot_replies.FILE_ACCEPTED)
 
     # Download the file
     file_path = TELEGRAM_AUDIO_DIR / new_file_name
@@ -85,9 +90,10 @@ def start_telegram_bot():
 
     # Add handlers
     application.add_handler(CommandHandler("start", __start))
-    application.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, __handle_audio))
+    # application.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, __handle_audio))
+    application.add_handler(MessageHandler(filters.ALL, __handle_audio))
 
-    logger.info("Telegram bot has been started.")
+    logger__.info("Telegram bot has been started.")
 
     # Start polling the bot
     application.run_polling()
