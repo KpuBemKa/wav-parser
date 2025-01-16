@@ -131,7 +131,7 @@ class AudioTranscriber(metaclass=SingletonMeta):
                 file_name=file_name,
                 file_path=audio_path,
                 transcription=transcribed_text,
-                summary=summary,
+                summary=summary.summary,
             )
 
         except Exception as ex:
