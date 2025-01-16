@@ -9,9 +9,10 @@ import torch
 
 from queue import SimpleQueue, Empty
 from transformers import pipeline
-from threading import Lock
+# from threading import Lock
 
 from modules.singleton_meta import SingletonMeta
+from modules.summarizer import Summarizer
 from settings import DELETE_CONVERTED_FILES, ODOO_UPLOAD_ENDPOINT, LOGGER_NAME
 from keys import ODOO_API_KEY
 
@@ -20,8 +21,8 @@ logger = logging.getLogger(LOGGER_NAME)
 
 
 FAST_WHISPER_ARGS = {
-    #"language": "en",
-    #"task": "translate",
+    "language": "en",
+    # "task": "translate",
     "max_new_tokens": 384,
 }
 
@@ -38,12 +39,15 @@ class AudioTranscriber(metaclass=SingletonMeta):
         self.__thread: threading.Thread | None = None
 
         # threading.Thread(target=self.__main_thread, daemon=True).start()
+        
+        logger.debug("AudioTrancriber() instance created.")
 
     def queue_audio_transcription(self, audio_file_path: pathlib.PurePath) -> None:
         if self.__thread is None:
             self.__thread = threading.Thread(target=self.__main_thread, daemon=True).start()
 
         self.__queue.put(pathlib.Path(audio_file_path))
+        logger.debug(f"Queued file '{audio_file_path.as_posix()}'")
 
     def __main_thread(self) -> None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -56,7 +60,7 @@ class AudioTranscriber(metaclass=SingletonMeta):
             "automatic-speech-recognition",
             # model="openai/whisper-base",  # select checkpoint from https://huggingface.co/openai/whisper-large-v3#model-details,
             model="openai/whisper-large-v3-turbo",
-            #tokenizer=processor.tokenizer,
+            # tokenizer=processor.tokenizer,
             # feature_extractor=processor.feature_extractor,
             # task=translate,
             torch_dtype=torch_dtype,
@@ -88,9 +92,9 @@ class AudioTranscriber(metaclass=SingletonMeta):
 
             file_name = audio_path.name
 
-            if audio_path.suffix == ".wav":
-                print("Normalizing volume for speech...")
-                audio_path = self.__try_normalize_for_speech(audio_path)
+            # if audio_path.suffix == ".wav":
+            print("Normalizing volume for speech...")
+            audio_path = self.__try_normalize_for_speech(audio_path)
 
             start_time = time.time()
             outputs = self.__pipe(
@@ -99,10 +103,16 @@ class AudioTranscriber(metaclass=SingletonMeta):
             )
             end_time = time.time()
 
+            transcribed_text = str(outputs["text"])
+
             logger.info(
                 f"Audio '{audio_path.as_posix()}' transcribed in {end_time - start_time} seconds."
             )
-            logger.info(f"Transcribed audio: {outputs['text']}")
+            logger.info(f"Transcribed audio:\n{transcribed_text}")
+
+            logger.info("Summarizing the review text...")
+            summary = Summarizer().summarize_text(transcribed_text)
+            logger.info(f"Summarized text: \n{summary}")
 
             # If input file is a .wav, try to convert it to an .ogg,
             # because telegram's `sendVoice` command accepts only .mp3, .ogg & .m4a,
@@ -114,13 +124,14 @@ class AudioTranscriber(metaclass=SingletonMeta):
 
             # Save transcribed text into a .txt file
             pathlib.Path(audio_path.with_suffix(".txt")).write_bytes(
-                str(outputs["text"]).encode("utf-8")
+                transcribed_text.encode("utf-8")
             )
 
             self.__forward_data(
-                file_name=f"{file_name}",
+                file_name=file_name,
                 file_path=audio_path,
-                transcription=str(outputs["text"]),
+                transcription=transcribed_text,
+                summary=summary,
             )
 
         except Exception as ex:
@@ -207,7 +218,9 @@ class AudioTranscriber(metaclass=SingletonMeta):
 
         return output_path
 
-    def __forward_data(self, file_name: str, file_path: pathlib.Path, transcription: str):
+    def __forward_data(
+        self, file_name: str, file_path: pathlib.Path, transcription: str, summary: str
+    ):
         # Define the headers (use your access token for authorization)
         headers = {
             "API-Key": ODOO_API_KEY,
@@ -217,6 +230,7 @@ class AudioTranscriber(metaclass=SingletonMeta):
         data = {
             "file_name": file_name,
             "transcription": transcription,
+            "summary": summary,
         }
 
         # Prepare the files payload

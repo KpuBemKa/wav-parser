@@ -1,8 +1,8 @@
 import pathlib
 import logging
 
-LOG_LEVEL = logging.INFO
-# LOG_LEVEL = logging.DEBUG
+# LOG_LEVEL = logging.INFO
+LOG_LEVEL = logging.DEBUG
 LOGGER_NAME = "logging"
 # log message format
 LOG_FORMAT = "%(asctime)s - %(levelname)s - %(module)s - %(message)s"
@@ -16,7 +16,7 @@ DELETE_CONVERTED_FILES = False
 ALLOWED_EXTENSIONS = [".wav", ".mp3", ".ogg"]
 
 ODOO_URL = "http://139.59.88.189:8069"
-ODOO_UPLOAD_ENDPOINT = f"{ODOO_URL}/recs/new_rec"
+ODOO_UPLOAD_ENDPOINT = f"{ODOO_URL}/revw/new_rec"
 
 # Path to store audio files
 TELEGRAM_AUDIO_DIR = pathlib.Path("./home/telegram-recordings/")

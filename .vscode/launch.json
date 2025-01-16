@@ -5,12 +5,24 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Python",
+      "name": "Python (main)",
       "type": "debugpy",
       "request": "launch",
       "stopOnEntry": false,
       "program": "./main.py",
       // "program": "${file}",
+      "cwd": "${workspaceFolder}",
+      "env": {},
+      "envFile": "${workspaceFolder}/.env",
+      "justMyCode": false
+    },
+    {
+      "name": "Python (active file)",
+      "type": "debugpy",
+      "request": "launch",
+      "stopOnEntry": false,
+      // "program": "./main.py",
+      "program": "${file}",
       "cwd": "${workspaceFolder}",
       "env": {},
       "envFile": "${workspaceFolder}/.env",
