@@ -12,7 +12,7 @@ MODEL = "llama3.2:3b"
 
 class IssueDepartment(Enum):
     FLOOR = "guest area"
-    SERVICE = "service"
+    # SERVICE = "service"
     KITCHEN = "kitchen"
     BAR = "bar"
     OTHER = "other"
@@ -112,11 +112,18 @@ class ReviewAnalizer(metaclass=SingletonMeta):
         departments_str = str(
             self.__execute_prompt(
                 (
-                    "I will give you an issue with a restaurant which was experienced by a visitor. "
-                    "I want you to select some of these departments you think are the most responsible and can fix this issue: "
-                    "Guest Area, Kitchen, Bar, Other. "
+                    # "I will give you an issue with a restaurant which was experienced by a visitor. "
+                    # "I want you to select some of these departments you think are the most responsible and can fix this issue: "
+                    # "Guest Area, Kitchen, Bar, Other. "
+                    # "Give me the result wihout any additional text, headers, or phrases. "
+                    # "Input issue: "
+                    "You are an expert in classifying customer feedback for a restaurant. Based on the issue I will give you, assign the feedback to the most relevant department. The departments are: "
+                    "Kitchen: For issues related to food quality, taste, temperature, preparation, or presentation. "
+                    "Guest area: For issues related to staff behavior, attentiveness, wait times, table service, and overall customer mood. "
+                    "Bar: For issues related to drinks, bartending, cocktails, or bar-specific service. "
+                    "Other: For feedback that does not clearly fit into any of the above categories. "
                     "Give me the result wihout any additional text, headers, or phrases. "
-                    "Input issue: "
+                    "Here is the issue: "
                     f"{issue_description}"
                 ).strip(" \n")
             ).message.content
