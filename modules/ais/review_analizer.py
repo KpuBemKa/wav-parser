@@ -11,16 +11,17 @@ MODEL = "llama3.2:3b"
 
 
 class IssueDepartment(Enum):
-    FLOOR = "floor"
+    FLOOR = "guest area"
+    SERVICE = "service"
     KITCHEN = "kitchen"
     BAR = "bar"
     OTHER = "other"
 
 
 class Issue:
-    def __init__(self, description: str, department: IssueDepartment) -> None:
+    def __init__(self, description: str, departments: list[IssueDepartment]) -> None:
         self.description = description
-        self.department = department
+        self.departments = departments
 
 
 class AnalizerResult:
@@ -105,23 +106,29 @@ class ReviewAnalizer(metaclass=SingletonMeta):
 
         return result_issues
 
-    def __get_issue_department(self, issue_description: str) -> IssueDepartment:
+    def __get_issue_department(self, issue_description: str) -> list[IssueDepartment]:
         issue_description.strip(" \n")
 
-        return IssueDepartment(
-            str(
-                self.__execute_prompt(
-                    (
-                        "I will give you an issue with a restaurant which was experienced by a visitor. "
-                        "I want you to categorize this issue to one of these departments: Floor, Kitchen, Bar, Other. "
-                        "Give me the department you think is responsible and can fix this issue. "
-                        "Give me the result wihout any additional text, headers, or phrases. "
-                        "Input issue: "
-                        f"{issue_description}"
-                    ).strip(" \n")
-                ).message.content
-            ).lower()
-        )
+        departments_str = str(
+            self.__execute_prompt(
+                (
+                    "I will give you an issue with a restaurant which was experienced by a visitor. "
+                    "I want you to select some of these departments you think are the most responsible and can fix this issue: "
+                    "Guest Area, Kitchen, Bar, Other. "
+                    "Give me the result wihout any additional text, headers, or phrases. "
+                    "Input issue: "
+                    f"{issue_description}"
+                ).strip(" \n")
+            ).message.content
+        ).lower()
+        
+        result: list[IssueDepartment] = []
+        
+        for department in list(IssueDepartment):
+            if department.value in departments_str:
+                result.append(department)
+                
+        return result
 
     def __execute_prompt(self, prompt: str) -> ollama.ChatResponse:
         logger.debug(f"Prompting:\n{prompt}\n-----")

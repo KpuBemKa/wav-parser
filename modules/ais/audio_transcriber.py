@@ -38,7 +38,8 @@ class AudioTranscriber(metaclass=SingletonMeta):
             chunk_length_s=30,
             batch_size=1,
             return_timestamps=True,
-            model_kwargs={"attn_implementation": attn_impl},
+            # attn_impl="sdpa",
+            model_kwargs={"attn_implementation": "sdpa"},
             device=device_int,
             generate_kwargs=FAST_WHISPER_ARGS,
         )
@@ -94,15 +95,15 @@ class AudioTranscriber(metaclass=SingletonMeta):
 
         logger.debug("Normalizing volume for speech...")
 
-        # New file will have the same name
-        output_path = input_audio
-
-        # Original file will have a different name
-        input_audio = input_audio.rename(
-            input_audio.absolute().with_stem(f"{input_audio.stem}_original")
-        )
-
         try:
+            # New file will have the same name
+            output_path = input_audio
+
+            # Original file will have a different name
+            input_audio = input_audio.rename(
+                input_audio.absolute().with_stem(f"{input_audio.stem}_original")
+            )
+
             subprocess.run(
                 [
                     "ffmpeg",
@@ -143,10 +144,10 @@ class AudioTranscriber(metaclass=SingletonMeta):
         """
         logger.debug(f"Converting {input_audio} to .ogg...")
 
-        # New file will have same name but different extension
-        output_path = input_audio.with_suffix(".ogg")
-
         try:
+            # New file will have same name but different extension
+            output_path = input_audio.with_suffix(".ogg")
+
             subprocess.run(
                 [
                     "ffmpeg",
