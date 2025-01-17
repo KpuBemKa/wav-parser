@@ -8,7 +8,7 @@ from twisted.protocols.ftp import FTPFactory, FTPRealm, FTP
 from twisted.cred import credentials, error
 from twisted.internet import defer
 
-from modules.audio_transcriber import AudioTranscriber
+from modules.ais.audio_transcriber import AudioTranscriber
 
 from settings import RECORDINGS_FOLDER, ALLOWED_EXTENSIONS, LOGGER_NAME
 

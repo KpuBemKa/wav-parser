@@ -1,33 +1,47 @@
+import logging
+from enum import Enum
+
 import ollama
 
+from modules.singleton_meta import SingletonMeta
+from settings import LOGGER_NAME
 
+logger = logging.getLogger(LOGGER_NAME)
 MODEL = "llama3.2:3b"
 
 
-class SummarizerResult:
-    def __init__(self, corrected_text, summary, issues) -> None:
+class IssueDepartment(Enum):
+    FLOOR = "floor"
+    KITCHEN = "kitchen"
+    BAR = "bar"
+    OTHER = "other"
+
+
+class Issue:
+    def __init__(self, description: str, department: IssueDepartment) -> None:
+        self.description = description
+        self.department = department
+
+
+class AnalizerResult:
+    def __init__(self, corrected_text: str, summary: str, issues: list[Issue]) -> None:
         self.corrected_text = corrected_text
         self.summary = summary
         self.issues = issues
 
 
-class Summarizer:
-    def __init__(self) -> None:
-        pass
+class ReviewAnalizer(metaclass=SingletonMeta):
+    def __init__(self, model_name=MODEL) -> None:
+        self.__ensure_existence(model_name)
 
-    def summarize_text(self, text: str) -> SummarizerResult:
+    def summarize_review(self, text: str) -> AnalizerResult:
         self.__ensure_existence(MODEL)
 
         corrected_text = self.__get_corrected(text)
-        # print(f"\nCorrected review:\n{corrected_text}\n---")
+        summarry = self.__get_summary(corrected_text)
+        issues = self.__get_issues(corrected_text)
 
-        summarry = self.__get_summary(text)
-        # print(f"\nReview summary:\n{summarry}\n---")
-
-        issues = self.__get_issues(text)
-        # print(f"\nReview issues:\n{issues}\n---")
-
-        return SummarizerResult(corrected_text, summarry, issues)
+        return AnalizerResult(corrected_text, summarry, issues)
 
     def __ensure_existence(self, model: str):
         try:
@@ -40,6 +54,8 @@ class Summarizer:
                 print(f"Error: {e.error}")
 
     def __get_corrected(self, text: str) -> str:
+        text = text.strip(" \n")
+
         return str(
             self.__execute_prompt(
                 (
@@ -48,11 +64,13 @@ class Summarizer:
                     "Give me the corrected text wihout any additional text, headers, or phrases. "
                     "Input review: "
                     f"{text}"
-                ).strip(" ")
+                ).strip(" \n")
             ).message.content
         )
 
     def __get_summary(self, text: str) -> str:
+        text = text.strip(" \n")
+
         return str(
             self.__execute_prompt(
                 (
@@ -61,12 +79,14 @@ class Summarizer:
                     "Give me the summary wihout any additional text, headers, or phrases. "
                     "Input review: "
                     f"{text}"
-                ).strip(" ")
+                ).strip(" \n")
             ).message.content
         )
 
-    def __get_issues(self, text: str) -> str:
-        return str(
+    def __get_issues(self, text: str) -> list[Issue]:
+        text = text.strip(" \n")
+
+        string_issues = str(
             self.__execute_prompt(
                 (
                     "I will give you a review for a restaurant. "
@@ -74,12 +94,39 @@ class Summarizer:
                     "Give me the list wihout any additional text, headers, or phrases. "
                     "Input review: "
                     f"{text}"
-                ).strip(" ")
+                ).strip(" \n")
             ).message.content
+        ).split("\n")
+
+        result_issues: list[Issue] = []
+
+        for str_issue in string_issues:
+            result_issues.append(Issue(str_issue, self.__get_issue_department(str_issue)))
+
+        return result_issues
+
+    def __get_issue_department(self, issue_description: str) -> IssueDepartment:
+        issue_description.strip(" \n")
+
+        return IssueDepartment(
+            str(
+                self.__execute_prompt(
+                    (
+                        "I will give you an issue with a restaurant which was experienced by a visitor. "
+                        "I want you to categorize this issue to one of these departments: Floor, Kitchen, Bar, Other. "
+                        "Give me the department you think is responsible and can fix this issue. "
+                        "Give me the result wihout any additional text, headers, or phrases. "
+                        "Input issue: "
+                        f"{issue_description}"
+                    ).strip(" \n")
+                ).message.content
+            ).lower()
         )
 
     def __execute_prompt(self, prompt: str) -> ollama.ChatResponse:
-        return ollama.chat(
+        logger.debug(f"Prompting:\n{prompt}\n-----")
+
+        result = ollama.chat(
             model=MODEL,
             messages=[
                 {
@@ -88,6 +135,10 @@ class Summarizer:
                 }
             ],
         )
+
+        logger.debug(f"Response:\n{result.message.content}\n-----")
+
+        return result
 
 
 # # MODEL = "llama3.1:8b"
