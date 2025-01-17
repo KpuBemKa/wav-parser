@@ -7,12 +7,13 @@ import requests
 import pathlib
 import torch
 
+from collections.abc import Callable
 from queue import SimpleQueue, Empty
 from transformers import pipeline
 # from threading import Lock
 
 from modules.singleton_meta import SingletonMeta
-from modules.summarizer import Summarizer
+from modules.summarizer import Summarizer, SummarizerResult as TranscriptionResult
 from settings import DELETE_CONVERTED_FILES, ODOO_UPLOAD_ENDPOINT, LOGGER_NAME
 from keys import ODOO_API_KEY
 
@@ -39,41 +40,46 @@ class AudioTranscriber(metaclass=SingletonMeta):
         self.__thread: threading.Thread | None = None
 
         # threading.Thread(target=self.__main_thread, daemon=True).start()
-        
+
         logger.debug("AudioTrancriber() instance created.")
 
-    def queue_audio_transcription(self, audio_file_path: pathlib.PurePath) -> None:
+    def queue_audio_transcription(
+        self,
+        audio_file_path: pathlib.PurePath,
+        done_callback: Callable[[TranscriptionResult], None] | None = None,
+    ) -> None:
+        # Start the main thread if not started
         if self.__thread is None:
             self.__thread = threading.Thread(target=self.__main_thread, daemon=True).start()
 
-        self.__queue.put(pathlib.Path(audio_file_path))
+        # Queue the transcription
+        self.__queue.put((pathlib.Path(audio_file_path), done_callback))
         logger.debug(f"Queued file '{audio_file_path.as_posix()}'")
 
     def __main_thread(self) -> None:
+        # Setup the pipeline
         device = "cuda" if torch.cuda.is_available() else "cpu"
         device_int = 0 if device == "cuda" else -1
         torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
-        # attn_impl = "flash_attention_2" if is_flash_attn_2_available() else "spda"
         attn_impl = "spda"
+        # model="openai/whisper-base",  # select checkpoint from https://huggingface.co/openai/whisper-large-v3#model-details,
+        model = "openai/whisper-large-v3-turbo"
 
         self.__pipe = pipeline(
             "automatic-speech-recognition",
-            # model="openai/whisper-base",  # select checkpoint from https://huggingface.co/openai/whisper-large-v3#model-details,
-            model="openai/whisper-large-v3-turbo",
-            # tokenizer=processor.tokenizer,
-            # feature_extractor=processor.feature_extractor,
-            # task=translate,
+            model=model,
             torch_dtype=torch_dtype,
             chunk_length_s=30,
             batch_size=1,
             return_timestamps=True,
-            model_kwargs={"attn_implementation": "sdpa"},
+            model_kwargs={"attn_implementation": attn_impl},
             device=device_int,
-            # max_new_tokens=384,
             generate_kwargs=FAST_WHISPER_ARGS,
         )
 
-        logger.info(f"Running on {device}, with attn_implementation: {attn_impl}")
+        logger.info(
+            f"Running on {device} with id #{device_int}, with attn_implementation: {attn_impl}"
+        )
 
         while True:
             if self.__queue.empty():
@@ -85,22 +91,20 @@ class AudioTranscriber(metaclass=SingletonMeta):
             except Empty:
                 continue
 
-    def __transcribe_audio(self, audio_path: pathlib.Path) -> None:
+    def __transcribe_audio(self, args: tuple[pathlib.Path, Callable[[TranscriptionResult]]]) -> None:
+        (audio_path, done_callback) = args
+
         try:
             # Transcribe audio file into text
             logger.info(f'Transcribing "{audio_path.as_posix()}" audio file...')
 
             file_name = audio_path.name
 
-            # if audio_path.suffix == ".wav":
-            print("Normalizing volume for speech...")
+            logger.debug("Normalizing volume for speech...")
             audio_path = self.__try_normalize_for_speech(audio_path)
 
             start_time = time.time()
-            outputs = self.__pipe(
-                audio_path.as_posix(),
-                # language='en',
-            )
+            outputs = self.__pipe(audio_path.as_posix())
             end_time = time.time()
 
             transcribed_text = str(outputs["text"])
@@ -134,6 +138,9 @@ class AudioTranscriber(metaclass=SingletonMeta):
                 summary=summary.summary,
             )
 
+            if done_callback is not None:
+                done_callback(summary)
+
         except Exception as ex:
             print(f"Exception catched: {ex} {ex.args}\n{traceback.format_exc()}")
 
@@ -148,7 +155,7 @@ class AudioTranscriber(metaclass=SingletonMeta):
         output_path = wav_path.with_stem(f"{wav_path.stem}_normalized")
 
         try:
-            result = subprocess.run(
+            subprocess.run(
                 [
                     "ffmpeg",
                     "-y",
@@ -189,7 +196,7 @@ class AudioTranscriber(metaclass=SingletonMeta):
         output_path = wav_path.with_stem(f"{wav_path.stem}_normalized")
 
         try:
-            result = subprocess.run(
+            subprocess.run(
                 [
                     "ffmpeg",
                     "-y",
