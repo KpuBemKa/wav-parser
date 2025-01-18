@@ -2,12 +2,12 @@ from .issue_department import IssueDepartment
 
 
 class Issue:
-    def __init__(self, description: str, departments: list[IssueDepartment]) -> None:
+    def __init__(self, description: str, department: IssueDepartment) -> None:
         self.description = description
-        self.departments = departments
+        self.department = department
 
     def to_dict(self):
         return {
             "description": self.description,
-            "departments": [dep.value for dep in self.departments],
+            "departments": self.department.value,
         }
