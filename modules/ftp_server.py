@@ -1,5 +1,5 @@
-import pathlib
-import logging
+from pathlib import Path
+from logging import getLogger
 
 from twisted.cred.checkers import FilePasswordDB
 from twisted.cred.portal import Portal
@@ -8,17 +8,16 @@ from twisted.protocols.ftp import FTPFactory, FTPRealm, FTP
 from twisted.cred import credentials, error
 from twisted.internet import defer
 
-from modules.ais.audio_transcriber import AudioTranscriber
+from modules.reviewing.review_context import ReviewContext
+from modules.reviewing.device_strategy import DeviceStrategy
 
 from settings import RECORDINGS_FOLDER, ALLOWED_EXTENSIONS, LOGGER_NAME
 
 
-logger = logging.getLogger(LOGGER_NAME)
+logger = getLogger(LOGGER_NAME)
 
 
 class CustomProtocolFTP(FTP):
-    transcriber = AudioTranscriber()
-
     def __init__(self) -> None:
         super().__init__()
 
@@ -26,12 +25,12 @@ class CustomProtocolFTP(FTP):
         deff = super(CustomProtocolFTP, self).ftp_STOR(path)
 
         def onStorComplete(deff):
-            audio_path = pathlib.PurePath(self.shell.filesystemRoot.path.decode()) / path
+            audio_path = Path(self.shell.filesystemRoot.path.decode()) / path
 
             if not self.should_transcribe_file(audio_path):
                 return deff
 
-            self.transcriber.queue_audio_transcription(audio_path)
+            ReviewContext().handle_audio(DeviceStrategy(), audio_path)
 
             return deff
 
@@ -39,7 +38,7 @@ class CustomProtocolFTP(FTP):
 
         return deff
 
-    def should_transcribe_file(self, file_path: pathlib.PurePath) -> bool:
+    def should_transcribe_file(self, file_path: Path) -> bool:
         if file_path.parent.name != RECORDINGS_FOLDER:
             return False
 

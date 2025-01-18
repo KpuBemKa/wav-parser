@@ -1,17 +1,17 @@
 import subprocess
-import time
-import logging
-import traceback
-import pathlib
 import torch
 
+from traceback import format_exc
+from pathlib import Path
+from logging import getLogger
+from time import time as getTime
 from transformers import pipeline
 
 from modules.singleton_meta import SingletonMeta
 from settings import DELETE_CONVERTED_FILES, LOGGER_NAME
 
 
-logger = logging.getLogger(LOGGER_NAME)
+logger = getLogger(LOGGER_NAME)
 
 
 FAST_WHISPER_ARGS = {
@@ -48,7 +48,7 @@ class AudioTranscriber(metaclass=SingletonMeta):
             f"Running on {device} with id #{device_int}, using attn_implementation: {attn_impl}"
         )
 
-    def transcribe_audio(self, audio_path: pathlib.Path) -> str | None:
+    def transcribe_audio(self, audio_path: Path) -> str | None:
         try:
             logger.info(f'Transcribing "{audio_path.as_posix()}" audio file...')
 
@@ -61,9 +61,9 @@ class AudioTranscriber(metaclass=SingletonMeta):
                 audio_path = self.__try_convert_to_ogg(audio_path)
 
             # Transcribe audio file into text
-            start_time = time.time()
+            start_time = getTime()
             outputs = self.__pipe(audio_path.as_posix())
-            end_time = time.time()
+            end_time = getTime()
 
             transcribed_text = str(outputs["text"])
 
@@ -73,19 +73,17 @@ class AudioTranscriber(metaclass=SingletonMeta):
             logger.info(f"Transcribed audio:\n{transcribed_text}")
 
             # Save transcribed text into a .txt file
-            pathlib.Path(audio_path.with_suffix(".txt")).write_bytes(
-                transcribed_text.encode("utf-8")
-            )
+            Path(audio_path.with_suffix(".txt")).write_bytes(transcribed_text.encode("utf-8"))
 
             return transcribed_text
 
         except Exception as ex:
             logger.error(
-                f"Exception catched durint audio transcription: {ex} {ex.args}\n{traceback.format_exc()}"
+                f"Exception catched durint audio transcription: {ex} {ex.args}\n{format_exc()}"
             )
             return None
 
-    def __try_normalize_for_speech(self, input_audio: pathlib.Path) -> pathlib.Path:
+    def __try_normalize_for_speech(self, input_audio: Path) -> Path:
         """
         Tries to normalize volume for speech in the given audio file.
 
@@ -131,11 +129,11 @@ class AudioTranscriber(metaclass=SingletonMeta):
 
         if DELETE_CONVERTED_FILES:
             # if the wav file was successfuly converted, no need to store it
-            pathlib.Path(input_audio).unlink()
+            Path(input_audio).unlink()
 
         return output_path
 
-    def __try_convert_to_ogg(self, input_audio: pathlib.Path) -> pathlib.Path:
+    def __try_convert_to_ogg(self, input_audio: Path) -> Path:
         """
         Tries to convert a .wav file to an .ogg one and normalize the volume.
 
@@ -173,36 +171,6 @@ class AudioTranscriber(metaclass=SingletonMeta):
 
         if DELETE_CONVERTED_FILES:
             # if the wav file was successfuly converted, no need to store it
-            pathlib.Path(input_audio).unlink()
+            Path(input_audio).unlink()
 
         return output_path
-
-    # def __forward_data(
-    #     self, file_name: str, file_path: pathlib.Path, transcription: str, summary: str
-    # ):
-    #     # Define the headers (use your access token for authorization)
-    #     headers = {
-    #         "API-Key": ODOO_API_KEY,
-    #     }
-
-    #     # Prepare the data payload
-    #     data = {
-    #         "file_name": file_name,
-    #         "transcription": transcription,
-    #         "summary": summary,
-    #     }
-
-    #     # Prepare the files payload
-    #     files = {
-    #         "file": open(file_path.as_posix(), "rb"),  # Open the file in binary mode
-    #     }
-
-    #     # Send the POST request
-    #     response = requests.post(ODOO_UPLOAD_ENDPOINT, headers=headers, data=data, files=files)
-
-    #     if response.status_code == 200:
-    #         logger.info("File transcription has been successfuly uploaded to the remote enpoint")
-    #     else:
-    #         logger.error(
-    #             f"File transcription upload has failed: {response.status_code} | Text:\n{response.text}"
-    #         )

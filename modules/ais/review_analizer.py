@@ -1,27 +1,14 @@
-import logging
-from enum import Enum
+from logging import getLogger
 
 import ollama
 
 from modules.singleton_meta import SingletonMeta
+from modules.models.issue import Issue, IssueDepartment
 from settings import LOGGER_NAME
 
-logger = logging.getLogger(LOGGER_NAME)
+
+logger = getLogger(LOGGER_NAME)
 MODEL = "llama3.2:3b"
-
-
-class IssueDepartment(Enum):
-    FLOOR = "guest area"
-    # SERVICE = "service"
-    KITCHEN = "kitchen"
-    BAR = "bar"
-    OTHER = "other"
-
-
-class Issue:
-    def __init__(self, description: str, departments: list[IssueDepartment]) -> None:
-        self.description = description
-        self.departments = departments
 
 
 class AnalizerResult:
@@ -128,13 +115,13 @@ class ReviewAnalizer(metaclass=SingletonMeta):
                 ).strip(" \n")
             ).message.content
         ).lower()
-        
+
         result: list[IssueDepartment] = []
-        
+
         for department in list(IssueDepartment):
             if department.value in departments_str:
                 result.append(department)
-                
+
         return result
 
     def __execute_prompt(self, prompt: str) -> ollama.ChatResponse:

@@ -1,6 +1,6 @@
 from multiprocessing import Process
 
-from modules.tg_bot import start_telegram_bot
+from modules.bots.tg_bot import start_telegram_bot
 from modules.ftp_server import start_ftp_server
 from modules.log import setup_custom_logger
 
