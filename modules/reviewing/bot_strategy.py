@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 import modules.bots.bot_replies as bot_replies
 
 from .review_strategy import ReviewStrategy
+from modules.models.issue import Issue
 from modules.ais.audio_transcriber import AudioTranscriber
 from modules.ais.review_analizer import ReviewAnalizer
 from modules.endpoints.upload_review import upload_review
@@ -42,11 +43,7 @@ class BotReviewStrategy(ReviewStrategy):
     def handle_text(self, text_message: str) -> None:
         review = ReviewAnalizer().summarize_review(text_message)
 
-        issues_str_list = ""
-        for issue in review.issues:
-            issues_str_list += issue.description + "\n"
-
-        self.__bot_instance.send_message(f"{bot_replies.TRANSCRIPTION_DONE}\n{issues_str_list}\n\n")
+        self.__bot_instance.send_message(self.__issues_to_text(review.issues))
 
         if not upload_review(
             audio_review_path=self.__audio_path,
@@ -57,3 +54,13 @@ class BotReviewStrategy(ReviewStrategy):
             self.__bot_instance.send_message(bot_replies.UPLOAD_ERROR)
 
         # QR CODE SHOULD BE SENT HERE
+
+    def __issues_to_text(self, issues: list[Issue]) -> str:
+        if len(issues) == 0:
+            return bot_replies.TRANSCRIPTION_DONE_NO_ISSUES
+
+        issues_str_list = ""
+        for issue in issues:
+            issues_str_list += issue.description + "\n"
+
+        return f"{bot_replies.TRANSCRIPTION_DONE_WITH_ISSUES}\n{issues_str_list}\n\n"

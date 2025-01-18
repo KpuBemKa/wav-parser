@@ -25,7 +25,7 @@ def upload_review(
         "file_name": audio_review_path.stem if audio_review_path is not None else "",
         "transcription": text_review,
         "summary": text_summary,
-        "issues": json.dumps(issues.__dict__, default=lambda o: o.__dict__),
+        "issues": json.dumps([issue.to_dict() for issue in issues]),
     }
 
     # Prepare the files payload
@@ -39,7 +39,9 @@ def upload_review(
         else None
     )
 
-    logger.debug(f"Uploading to {ODOO_UPLOAD_ENDPOINT}:\n{data}---\nWith file: {audio_review_path}")
+    logger.debug(
+        f"Uploading to {ODOO_UPLOAD_ENDPOINT}:\n{data}\n---\nWith file: {audio_review_path}"
+    )
     return True
 
     # # Send the POST request

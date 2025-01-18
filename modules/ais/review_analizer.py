@@ -80,6 +80,7 @@ class ReviewAnalizer(metaclass=SingletonMeta):
                     "I will give you a review for a restaurant. "
                     "I want you to make a list of any issues the reviewer may have had with food or service. "
                     "Give me the list wihout any additional text, headers, or phrases. "
+                    'If you think there are no issues related to restaurants, respond with "None". '
                     "Input review: "
                     f"{text}"
                 ).strip(" \n")
@@ -89,7 +90,8 @@ class ReviewAnalizer(metaclass=SingletonMeta):
         result_issues: list[Issue] = []
 
         for str_issue in string_issues:
-            result_issues.append(Issue(str_issue, self.__get_issue_department(str_issue)))
+            if "None" not in str_issue:
+                result_issues.append(Issue(str_issue, self.__get_issue_department(str_issue)))
 
         return result_issues
 
