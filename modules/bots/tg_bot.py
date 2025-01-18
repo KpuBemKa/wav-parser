@@ -1,5 +1,4 @@
 import traceback
-import html
 import json
 
 from logging import getLogger
