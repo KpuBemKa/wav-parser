@@ -8,7 +8,7 @@ START_ATTACHEMENT_PATH = "static/start-attachement.jpg"
 ATTACHEMENT_DENIED = "Sorry, I can accept only Voice & Audio Notes 🎙"
 FILETYPE_DENIED = "Sorry, I can accept only Voice & Audio Notes 🎙"
 
-FILE_ACCEPTED = "Thank you for your feedback! ❤️ \n\nGive me some time to analize your review. 🫶🏼"
+REVIEW_ACCEPTED = "Thank you for your feedback! ❤️ \n\nGive me some time to analize your review. 🫶🏼"
 
 TRANSCRIPTION_ERROR = (
     "Sorry, there was an issue with transcribing your review. Could you please try again?"

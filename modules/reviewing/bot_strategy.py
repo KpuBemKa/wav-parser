@@ -28,6 +28,7 @@ class UserDialog(ABC):
 class BotReviewStrategy(ReviewStrategy):
     def __init__(self, bot_instance: UserDialog) -> None:
         self.__bot_instance = bot_instance
+        self.__audio_path: Path | None = None
 
     def handle_audio(self, audio_path: Path) -> None:
         self.__audio_path = audio_path
@@ -61,6 +62,6 @@ class BotReviewStrategy(ReviewStrategy):
 
         issues_str_list = ""
         for issue in issues:
-            issues_str_list += issue.description + "\n"
+            issues_str_list += issue.description.strip(" \n") + "\n"
 
         return f"{bot_replies.TRANSCRIPTION_DONE_WITH_ISSUES}\n{issues_str_list}\n\n"
