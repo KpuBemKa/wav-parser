@@ -43,6 +43,10 @@ class BotReviewStrategy(ReviewStrategy):
 
     def handle_text(self, text_message: str) -> None:
         review = ReviewAnalizer().summarize_review(text_message)
+        
+        if review is None:
+            self.__bot_instance.send_message(bot_replies.TRANSCRIPTION_ERROR)
+            return
 
         self.__bot_instance.send_message(self.__issues_to_text(review.issues))
 

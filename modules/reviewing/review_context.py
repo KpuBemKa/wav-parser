@@ -5,6 +5,8 @@ from queue import SimpleQueue
 from threading import Thread
 
 from .review_strategy import ReviewStrategy
+from modules.ais.audio_transcriber import AudioTranscriber
+from modules.ais.review_analizer import ReviewAnalizer
 from modules.singleton_meta import SingletonMeta
 from settings import LOGGER_NAME
 
@@ -21,6 +23,7 @@ class ReviewContext(metaclass=SingletonMeta):
 
     def handle_audio(self, strategy: ReviewStrategy, audio_path: Path):
         if self.__thread is None:
+            logger.info("Thread is None")
             self.__start_thread()
 
         self.__audio_queue.put((strategy, audio_path))
@@ -28,6 +31,7 @@ class ReviewContext(metaclass=SingletonMeta):
 
     def handle_text(self, strategy: ReviewStrategy, text_review: str):
         if self.__thread is None:
+            logger.info("Thread is None")
             self.__start_thread()
 
         self.__text_queue.put((strategy, text_review))
@@ -38,6 +42,10 @@ class ReviewContext(metaclass=SingletonMeta):
         self.__thread.start()
 
     def __thread_executor(self) -> None:
+        # Setup AIs in specific order
+        AudioTranscriber()
+        ReviewAnalizer()
+
         while True:
             if not self.__audio_queue.empty():
                 (strategy, audio_path) = self.__audio_queue.get(block=True, timeout=10)

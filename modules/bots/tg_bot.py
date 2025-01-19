@@ -1,10 +1,11 @@
+import asyncio
 import traceback
 import json
 
 from logging import getLogger
 from pathlib import Path
 from time import time as getTime
-from asyncio import run as asyncioRun
+# from asyncio import create_task as createTask, get_running_loop as getRunningLoop
 
 from telegram import Update, File, Message
 from telegram.ext import (
@@ -27,15 +28,24 @@ logger__ = getLogger(LOGGER_NAME)
 
 
 class TelegramUserDialog(UserDialog):
-    def __init__(self, message: Message) -> None:
+    def __init__(self, event_loop: asyncio.AbstractEventLoop, message: Message) -> None:
+        self.event_loop = event_loop
         self.__message = message
 
     def send_message(self, message: str) -> None:
-        asyncioRun(self.__message.reply_text(message))
+        self.__async_to_sync(
+            self.__message.reply_text(message, reply_to_message_id=self.__message.id)
+        )
 
     def send_image(self, image_path: Path) -> None:
-        with open(bot_replies.START_ATTACHEMENT_PATH, "rb") as image:
-            asyncioRun(self.__message.reply_photo(image, caption=bot_replies.START_REPLY))
+        with open(image_path, "rb") as image:
+            self.__async_to_sync(self.__message.reply_photo(image, caption=bot_replies.START_REPLY))
+
+    def __async_to_sync(self, awaitable_target):
+        # loop = asyncio.new_event_loop()
+        # self.event_loop.create_task(awaitable_target()).add_done_callback(lambda t: print("Done"))
+        # loop.close()
+        return asyncio.run_coroutine_threadsafe(awaitable_target, self.event_loop).result()
 
 
 async def __start(update: Update, context: CallbackContext):
@@ -102,7 +112,9 @@ async def __handle_audio(update: Update, context: CallbackContext):
     await file_info.download_to_drive(file_path.absolute().as_posix())
 
     # Transcribe it, and upload it
-    ReviewContext().handle_audio(BotReviewStrategy(TelegramUserDialog(update.message)), file_path)
+    ReviewContext().handle_audio(
+        BotReviewStrategy(TelegramUserDialog(asyncio.get_running_loop(), update.message)), file_path
+    )
 
     # Wait for the reply to be delivered
     await reply_await
@@ -122,7 +134,8 @@ async def __handle_text(update: Update, context: CallbackContext):
 
     # Transcribe it, and upload it
     ReviewContext().handle_text(
-        BotReviewStrategy(TelegramUserDialog(update.message)), update.message.text
+        BotReviewStrategy(TelegramUserDialog(asyncio.get_running_loop(), update.message)),
+        update.message.text,
     )
 
     await reply_await

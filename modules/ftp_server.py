@@ -103,6 +103,6 @@ def start_ftp_server():
 
     reactor.listenTCP(20021, f)
 
-    logger.info("FTP server has been started.")
+    logger.info("FTP server has been started on port 20021")
 
     reactor.run()
