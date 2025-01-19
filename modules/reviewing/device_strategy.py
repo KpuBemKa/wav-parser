@@ -28,6 +28,10 @@ class DeviceStrategy(ReviewStrategy):
     def handle_text(self, text_message: str) -> None:
         review = ReviewAnalizer().summarize_review(text_message)
 
+        if review is None:
+            logger.warning("Review analizer returned an empty value. Error?")
+            return
+
         upload_review(
             audio_review_path=self.__audio_path,
             text_review=review.corrected_text,
