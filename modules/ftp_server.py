@@ -76,7 +76,7 @@ class CustomFtpProtocol(FTP):
 
         def onStorComplete(deff):
             try:
-                audio_path = Path(self.shell.filesystemRoot.path.decode()) / path
+                audio_path: Path = Path(self.shell.filesystemRoot.path.decode()) / path
 
                 if not self.should_transcribe_file(audio_path):
                     return deff
