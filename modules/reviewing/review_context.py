@@ -1,6 +1,7 @@
 from time import sleep
 from logging import getLogger
 from pathlib import Path, PurePath
+# from multiprocessing import Queue
 from queue import Queue
 from threading import Thread
 
@@ -21,29 +22,6 @@ class ReviewQueues:
 class ReviewContext:
     def __init__(self, review_queues: ReviewQueues) -> None:
         self.__queues = review_queues
-        # self.__thread: Thread | None = None
-        # self.__thread = Thread(target=self.__thread_executor, daemon=True)
-        # self.__thread.start()
-
-    # def handle_audio(self, strategy: ReviewStrategy, audio_path: Path):
-    #     if self.__thread is None:
-    #         logger.info("Thread is None")
-    #         self.__start_thread()
-
-    #     self.__queues.audio_queue.put((strategy, audio_path))
-    #     logger.debug(f"Queued to transcribe audio file '{audio_path.as_posix()}'")
-
-    # def handle_text(self, strategy: ReviewStrategy, text_review: str):
-    #     if self.__thread is None:
-    #         logger.info("Thread is None")
-    #         self.__start_thread()
-
-    #     self.__text_queue.put((strategy, text_review))
-    #     logger.debug(f"Queued to analize text:\n{text_review}\n---")
-
-    # def start_thread(self):
-    #     self.__thread = Thread(target=self.__thread_executor, daemon=True)
-    #     self.__thread.start()
 
     def run_reviewing(self) -> None:
         # Setup AIs in specific order
