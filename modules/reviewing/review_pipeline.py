@@ -55,7 +55,7 @@ class ReviewPipeline:
     def thread_executor(self) -> None:
         AudioTranscriber()
         ReviewAnalizer()
-        
+
         while True:
             audio_available = not self.__audio_queue.empty()
             text_available = not self.__text_queue.empty()
@@ -71,18 +71,19 @@ class ReviewPipeline:
             sleep(1)
 
     def __handle_audio(self, audio_path: Path) -> ReviewResult | None:
-        self.__audio_path = audio_path
         transcribed = AudioTranscriber().transcribe_audio(audio_path)
 
         if transcribed is None:
             logger.warning("Transcription returned an empty value. Error?")
             return
 
-        self.__handle_text(transcribed)
+        self.__handle_text(transcribed, audio_path)
 
-    def __handle_text(self, text_message: str) -> ReviewResult | None:
+    def __handle_text(
+        self, text_message: str, audio_path: Path | None = None
+    ) -> ReviewResult | None:
         # return ReviewResult("a", "b", [Issue("c", IssueDepartment.BAR)])
-        
+
         review = ReviewAnalizer().summarize_review(text_message)
 
         if review is None:
@@ -90,7 +91,7 @@ class ReviewPipeline:
             return
 
         if upload_review(
-            audio_review_path=self.__audio_path,
+            audio_review_path=audio_path,
             text_review=review.corrected_text,
             text_summary=review.summary,
             issues=review.issues,
