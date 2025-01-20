@@ -8,8 +8,7 @@ from twisted.protocols.ftp import FTPFactory, FTPRealm, FTP
 from twisted.cred import credentials, error
 from twisted.internet import defer
 
-from modules.reviewing.review_context import ReviewContext
-from modules.reviewing.device_strategy import DeviceStrategy
+from modules.reviewing.review_pipeline import ReviewPipeline
 
 from settings import RECORDINGS_FOLDER, ALLOWED_EXTENSIONS, LOGGER_NAME
 
@@ -17,7 +16,7 @@ from settings import RECORDINGS_FOLDER, ALLOWED_EXTENSIONS, LOGGER_NAME
 logger = getLogger(LOGGER_NAME)
 
 
-rv_ctx: ReviewContext
+rv_ctx: ReviewPipeline
 
 
 class CustomProtocolFTP(FTP):
@@ -33,7 +32,7 @@ class CustomProtocolFTP(FTP):
             if not self.should_transcribe_file(audio_path):
                 return deff
 
-            rv_ctx.handle_audio(DeviceStrategy(), audio_path)
+            # rv_ctx.queue_audio(audio_path, lambda a: print("yo"))
 
             return deff
 
@@ -97,7 +96,7 @@ class CustomDB(FilePasswordDB):
 
 
 # Start the FTP server
-def start_ftp_server(context: ReviewContext):
+def start_ftp_server(context: ReviewPipeline):
     global rv_ctx
     rv_ctx = context
 

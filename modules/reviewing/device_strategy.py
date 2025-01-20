@@ -1,36 +1,36 @@
-from pathlib import Path
-from logging import getLogger
+# from pathlib import Path
+# from logging import getLogger
 
-from modules.reviewing.review_strategy import ReviewStrategy
-from modules.ais.audio_transcriber import AudioTranscriber
-from modules.ais.review_analizer import ReviewAnalizer
-from modules.endpoints.upload_review import upload_review
-from settings import LOGGER_NAME
-
-
-logger = getLogger(LOGGER_NAME)
+# from modules.reviewing.review_strategy import ReviewStrategy
+# from modules.ais.audio_transcriber import AudioTranscriber
+# from modules.ais.review_analizer import ReviewAnalizer
+# from modules.endpoints.upload_review import upload_review
+# from settings import LOGGER_NAME
 
 
-class DeviceStrategy(ReviewStrategy):
-    def __init__(self) -> None:
-        pass
+# logger = getLogger(LOGGER_NAME)
 
-    def handle_audio(self, audio_path: Path) -> None:
-        self.__audio_path = audio_path
-        transcribed = AudioTranscriber().transcribe_audio(audio_path)
 
-        if transcribed is None:
-            logger.warning("Transcription returned an empty value. Error?")
-            return
+# class DeviceStrategy(ReviewStrategy):
+#     def __init__(self) -> None:
+#         pass
 
-        self.handle_text(transcribed)
+#     def handle_audio(self, audio_path: Path) -> None:
+#         self.__audio_path = audio_path
+#         transcribed = AudioTranscriber().transcribe_audio(audio_path)
 
-    def handle_text(self, text_message: str) -> None:
-        review = ReviewAnalizer().summarize_review(text_message)
+#         if transcribed is None:
+#             logger.warning("Transcription returned an empty value. Error?")
+#             return
 
-        upload_review(
-            audio_review_path=self.__audio_path,
-            text_review=review.corrected_text,
-            text_summary=review.summary,
-            issues=review.issues,
-        )
+#         self.handle_text(transcribed)
+
+#     def handle_text(self, text_message: str) -> None:
+#         review = ReviewAnalizer().summarize_review(text_message)
+
+#         upload_review(
+#             audio_review_path=self.__audio_path,
+#             text_review=review.corrected_text,
+#             text_summary=review.summary,
+#             issues=review.issues,
+#         )

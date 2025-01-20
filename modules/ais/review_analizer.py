@@ -5,6 +5,7 @@ import ollama
 
 from modules.singleton_meta import SingletonMeta
 from modules.models.issue import Issue, IssueDepartment
+from modules.models.review_result import ReviewResult
 from settings import LOGGER_NAME
 
 
@@ -12,18 +13,11 @@ logger = getLogger(LOGGER_NAME)
 MODEL = "llama3.2:3b"
 
 
-class AnalizerResult:
-    def __init__(self, corrected_text: str, summary: str, issues: list[Issue]) -> None:
-        self.corrected_text = corrected_text
-        self.summary = summary
-        self.issues = issues
-
-
 class ReviewAnalizer(metaclass=SingletonMeta):
     def __init__(self, model_name=MODEL) -> None:
         self.__ensure_existence(model_name)
 
-    def summarize_review(self, text: str) -> AnalizerResult | None:
+    def summarize_review(self, text: str) -> ReviewResult | None:
         try:
             corrected_text = self.__get_corrected_translated(
                 text.replace("\n", " ").replace("  ", " ")
@@ -31,7 +25,7 @@ class ReviewAnalizer(metaclass=SingletonMeta):
             summarry = self.__get_summary(corrected_text)
             issues = self.__get_issues(corrected_text)
 
-            return AnalizerResult(corrected_text, summarry, issues)
+            return ReviewResult(corrected_text, summarry, issues)
         except Exception as ex:
             logger.error(
                 f"Exception catched durint audio transcription: {ex} {ex.args}\n{format_exc()}"

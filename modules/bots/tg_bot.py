@@ -18,181 +18,187 @@ from telegram.ext import (
 )
 
 from . import bot_replies
-from modules.reviewing.review_context import ReviewContext
-from modules.reviewing.bot_strategy import BotReviewStrategy, UserDialog
+from modules.models.issue import Issue
+from modules.reviewing.review_pipeline import ReviewPipeline, ReviewResult, DONE_CALLBACK_TYPE, UUID
 from settings import TELEGRAM_AUDIO_DIR, LOGGER_NAME
 from keys import TELEGRAM_BOT_TOKEN
 
 
-
 logger__ = getLogger(LOGGER_NAME)
-rv_ctx: ReviewContext
+# rv_ctx: ReviewContext
 
 
-class TelegramUserDialog(UserDialog):
-    def __init__(self, message: Message) -> None:
-        # self.event_loop = event_loop
+class ReviewResultHandler:
+    def __init__(self, message: Message):
         self.__message = message
 
-    def send_message(self, message: str) -> None:
-        self.__async_to_sync(
-            self.__message.reply_text(message, reply_to_message_id=self.__message.id)
+    def review_done_callback(self, review_result: ReviewResult | None):
+        # if review_result is None:
+        #     self
+        print("ayyo")
+        asyncio.get_event_loop().create_task(self.__message.reply_text("ayyo"))
+
+
+class TelegramBot:
+    def __init__(self, review_pipeline: ReviewPipeline):
+        self.__review_pipe = review_pipeline
+
+    def start_telegram_bot(self):
+        """Starts the Telegram bot in a blocking manner"""
+
+        # Initialize Application instead of Updater
+        application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+
+        # Add handlers
+        application.add_handler(CommandHandler("start", self.__start))
+        # application.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, __handle_audio))
+        application.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, self.__handle_audio))
+        application.add_handler(MessageHandler(filters.TEXT, self.__handle_text))
+
+        application.add_error_handler(self.__error_handler)
+
+        logger__.info("Telegram bot has been started.")
+
+        # Start polling the bot
+        application.run_polling()
+
+    async def __start(self, update: Update, context: CallbackContext):
+        if update.message is None:
+            logger__.warning("Update does not contain Message", stack_info=True)
+            return
+
+        with open(bot_replies.START_ATTACHEMENT_PATH, "rb") as image:
+            await update.message.reply_photo(image, caption=bot_replies.START_REPLY)
+
+    async def __handle_audio(self, update: Update, context: CallbackContext):
+        if update.message is None:
+            logger__.warning("Update does not contain Message", stack_info=True)
+            return
+
+        # Get the audio file
+        file = update.message.audio or update.message.voice
+
+        # Check if an audio has been uploaded
+        if file is None:
+            await update.message.reply_text(bot_replies.ATTACHEMENT_DENIED)
+            return
+
+        # Start the file download
+        file_info_await = context.bot.get_file(file.file_id)
+
+        if update.message.audio:
+            # If file is an audio file
+            file_name = update.message.audio.file_name
+        else:
+            # If file is a voice message
+            file_name = "voice.ogg"
+
+        if file_name is None:
+            await update.message.reply_text(bot_replies.ATTACHEMENT_DENIED)
+            return
+
+        # Check if file extension is supported
+        file_ext = file_name[file_name.rfind(".") :]
+        if file_ext not in [".wav", ".ogg", ".mp3"]:
+            await update.message.reply_text(f"{bot_replies.ATTACHEMENT_DENIED}{file_ext}")
+            return
+
+        # Get sender's username
+        if update.message.from_user:
+            username = update.message.from_user.username
+
+        # Make username anonymous if no username was found
+        if username is None:
+            username = "Anonymous"
+
+        # Make the new file name
+        new_file_name = f"tg@{username}_{int(getTime())}{file_ext}"
+
+        # Wait for file info to be received
+        file_info: File = await file_info_await
+
+        # Reply to the user that his audio has been received
+        reply_await = update.message.reply_text(bot_replies.REVIEW_ACCEPTED)
+
+        # Download the file
+        file_path = TELEGRAM_AUDIO_DIR / new_file_name
+        await file_info.download_to_drive(file_path.absolute().as_posix())
+
+        # Transcribe it, and upload it
+        self.__review_pipe.queue_audio(
+            file_path, ReviewResultHandler(update.message).review_done_callback
         )
 
-    def send_image(self, image_path: Path) -> None:
-        with open(image_path, "rb") as image:
-            self.__async_to_sync(self.__message.reply_photo(image, caption=bot_replies.START_REPLY))
+        # Wait for the reply to be delivered
+        await reply_await
 
-    def __async_to_sync(self, awaitable_target):
-        loop = asyncio.new_event_loop()
-        loop.run_until_complete(awaitable_target)
-        # loop.create_task(awaitable_target)..add_done_callback(lambda t: print("Done"))
-        loop.close()
-        # return asyncio.run_coroutine_threadsafe(awaitable_target, self.event_loop).result()
+    async def __handle_text(self, update: Update, context: CallbackContext):
+        if update.message is None:
+            logger__.warning("Update does not contain Message.", stack_info=True)
+            return
 
+        if update.message.text is None:
+            logger__.warning("Message does not contain any text.", stack_info=True)
+            return
 
-async def __start(update: Update, context: CallbackContext):
-    if update.message is None:
-        logger__.warning("Update does not contain Message", stack_info=True)
-        return
+        # Reply to the user that his audio has been received
+        reply_await = update.message.reply_text(bot_replies.REVIEW_ACCEPTED)
 
-    with open(bot_replies.START_ATTACHEMENT_PATH, "rb") as image:
-        await update.message.reply_photo(image, caption=bot_replies.START_REPLY)
+        # Transcribe it, and upload it
+        result = await self.__wait_for_result(self.__review_pipe.queue_text(update.message.text))
 
+        await update.message.reply_text(result.summary if result is not None else "ayyo")
 
-async def __handle_audio(update: Update, context: CallbackContext):
-    if update.message is None:
-        logger__.warning("Update does not contain Message", stack_info=True)
-        return
+        await reply_await
 
-    # Get the audio file
-    file = update.message.audio or update.message.voice
+    async def __error_handler(self, update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Log the error and send a telegram message to notify the developer."""
+        # Log the error before we do anything else, so we can see it even if something breaks.
+        logger__.error("Exception while handling an update:", exc_info=context.error)
 
-    # Check if an audio has been uploaded
-    if file is None:
-        await update.message.reply_text(bot_replies.ATTACHEMENT_DENIED)
-        return
+        # traceback.format_exception returns the usual python message about an exception, but as a
+        # list of strings rather than a single string, so we have to join them together.
+        tb_list = traceback.format_exception(
+            None, context.error, context.error.__traceback__ if context.error is not None else None
+        )
+        tb_string = "".join(tb_list)
 
-    # Start the file download
-    file_info_await = context.bot.get_file(file.file_id)
+        # Build the message with some markup and additional information about what happened.
+        # You might need to add some logic to deal with messages longer than the 4096 character limit.
+        update_str = update.to_dict() if isinstance(update, Update) else str(update)
+        message = (
+            "An exception was raised while handling an update\n"
+            f"update:\n{(json.dumps(update_str, indent=2, ensure_ascii=False))}\n\n"
+            f"context.chat_data:\n{str(context.chat_data)}\n\n"
+            f"context.user_data:{str(context.user_data)}\n\n"
+            f"{tb_string}"
+        )
 
-    if update.message.audio:
-        # If file is an audio file
-        file_name = update.message.audio.file_name
-    else:
-        # If file is a voice message
-        file_name = "voice.ogg"
+        logger__.error(message)
 
-    if file_name is None:
-        await update.message.reply_text(bot_replies.ATTACHEMENT_DENIED)
-        return
+        # # Finally, send the message
+        # await context.bot.send_message(
+        #     chat_id=DEVELOPER_CHAT_ID, text=message, parse_mode=ParseMode.HTML
+        # )
 
-    # Check if file extension is supported
-    file_ext = file_name[file_name.rfind(".") :]
-    if file_ext not in [".wav", ".ogg", ".mp3"]:
-        await update.message.reply_text(f"{bot_replies.ATTACHEMENT_DENIED}{file_ext}")
-        return
+    async def __wait_for_result(self, uuid: UUID) -> ReviewResult | None:
+        while True:
+            await asyncio.sleep(1)
 
-    # Get sender's username
-    if update.message.from_user:
-        username = update.message.from_user.username
+            for _uuid, _result in self.__review_pipe.get_result_list():
+                if uuid == _uuid:
+                    return _result
 
-    # Make username anonymous if no username was found
-    if username is None:
-        username = "Anonymous"
+    def __issues_to_text(self, issues: list[Issue]) -> str:
+        if len(issues) == 0:
+            return bot_replies.TRANSCRIPTION_DONE_NO_ISSUES
 
-    # Make the new file name
-    new_file_name = f"tg@{username}_{int(getTime())}{file_ext}"
+        issues_str_list = ""
+        for issue in issues:
+            issues_str_list += issue.description.strip(" \n") + "\n"
 
-    # Wait for file info to be received
-    file_info: File = await file_info_await
-
-    # Reply to the user that his audio has been received
-    reply_await = update.message.reply_text(bot_replies.REVIEW_ACCEPTED)
-
-    # Download the file
-    file_path = TELEGRAM_AUDIO_DIR / new_file_name
-    await file_info.download_to_drive(file_path.absolute().as_posix())
-
-    # Transcribe it, and upload it
-    rv_ctx.handle_audio(
-        BotReviewStrategy(TelegramUserDialog(update.message)), file_path
-    )
-
-    # Wait for the reply to be delivered
-    await reply_await
+        return f"{bot_replies.TRANSCRIPTION_DONE_WITH_ISSUES}\n{issues_str_list}\n\n"
 
 
-async def __handle_text(update: Update, context: CallbackContext):
-    if update.message is None:
-        logger__.warning("Update does not contain Message.", stack_info=True)
-        return
-
-    if update.message.text is None:
-        logger__.warning("Message does not contain any text.", stack_info=True)
-        return
-
-    # Reply to the user that his audio has been received
-    reply_await = update.message.reply_text(bot_replies.REVIEW_ACCEPTED)
-
-    # Transcribe it, and upload it
-    rv_ctx.handle_text(
-        BotReviewStrategy(TelegramUserDialog(update.message)),
-        update.message.text,
-    )
-
-    await reply_await
-
-
-async def __error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Log the error and send a telegram message to notify the developer."""
-    # Log the error before we do anything else, so we can see it even if something breaks.
-    logger__.error("Exception while handling an update:", exc_info=context.error)
-
-    # traceback.format_exception returns the usual python message about an exception, but as a
-    # list of strings rather than a single string, so we have to join them together.
-    tb_list = traceback.format_exception(
-        None, context.error, context.error.__traceback__ if context.error is not None else None
-    )
-    tb_string = "".join(tb_list)
-
-    # Build the message with some markup and additional information about what happened.
-    # You might need to add some logic to deal with messages longer than the 4096 character limit.
-    update_str = update.to_dict() if isinstance(update, Update) else str(update)
-    message = (
-        "An exception was raised while handling an update\n"
-        f"update:\n{(json.dumps(update_str, indent=2, ensure_ascii=False))}\n\n"
-        f"context.chat_data:\n{str(context.chat_data)}\n\n"
-        f"context.user_data:{str(context.user_data)}\n\n"
-        f"{tb_string}"
-    )
-
-    logger__.error(message)
-
-    # # Finally, send the message
-    # await context.bot.send_message(
-    #     chat_id=DEVELOPER_CHAT_ID, text=message, parse_mode=ParseMode.HTML
-    # )
-
-
-def start_telegram_bot(context: ReviewContext):
-    """Starts the Telegram bot in a blocking manner"""
-
-    global rv_ctx
-    rv_ctx = context
-
-    # Initialize Application instead of Updater
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-
-    # Add handlers
-    application.add_handler(CommandHandler("start", __start))
-    # application.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, __handle_audio))
-    application.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, __handle_audio))
-    application.add_handler(MessageHandler(filters.TEXT, __handle_text))
-
-    application.add_error_handler(__error_handler)
-
-    logger__.info("Telegram bot has been started.")
-
-    # Start polling the bot
-    application.run_polling()
+def start_tg_bot(pipeline: ReviewPipeline):
+    TelegramBot(pipeline).start_telegram_bot()
