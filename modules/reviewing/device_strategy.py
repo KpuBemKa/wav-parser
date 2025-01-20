@@ -1,7 +1,7 @@
 from pathlib import Path
 from logging import getLogger
 
-from .review_strategy import ReviewStrategy
+from modules.reviewing.review_strategy import ReviewStrategy
 from modules.ais.audio_transcriber import AudioTranscriber
 from modules.ais.review_analizer import ReviewAnalizer
 from modules.endpoints.upload_review import upload_review

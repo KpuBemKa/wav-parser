@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 
 import modules.bots.bot_replies as bot_replies
 
-from .review_strategy import ReviewStrategy
+from modules.reviewing.review_strategy import ReviewStrategy
 from modules.models.issue import Issue
 from modules.ais.audio_transcriber import AudioTranscriber
 from modules.ais.review_analizer import ReviewAnalizer

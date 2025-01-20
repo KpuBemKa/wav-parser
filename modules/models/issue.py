@@ -1,4 +1,4 @@
-from .issue_department import IssueDepartment
+from modules.models.issue_department import IssueDepartment
 
 
 class Issue:

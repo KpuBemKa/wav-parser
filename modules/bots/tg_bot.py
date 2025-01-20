@@ -45,7 +45,8 @@ class TelegramUserDialog(UserDialog):
 
     def __async_to_sync(self, awaitable_target):
         loop = asyncio.new_event_loop()
-        loop.create_task(awaitable_target()).add_done_callback(lambda t: print("Done"))
+        loop.run_until_complete(awaitable_target)
+        # loop.create_task(awaitable_target)..add_done_callback(lambda t: print("Done"))
         loop.close()
         # return asyncio.run_coroutine_threadsafe(awaitable_target, self.event_loop).result()
 
