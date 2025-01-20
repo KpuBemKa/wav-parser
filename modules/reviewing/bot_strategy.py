@@ -26,8 +26,8 @@ class UserDialog(ABC):
 
 
 class BotReviewStrategy(ReviewStrategy):
-    def __init__(self, bot_instance: UserDialog) -> None:
-        self.__bot_instance = bot_instance
+    def __init__(self, user_dialog: UserDialog) -> None:
+        self.__user_dialog = user_dialog
         self.__audio_path: Path | None = None
 
     def handle_audio(self, audio_path: Path) -> None:
@@ -36,7 +36,7 @@ class BotReviewStrategy(ReviewStrategy):
 
         if transcribed is None:
             logger.warning("Transcription returned an empty value. Error?")
-            self.__bot_instance.send_message(bot_replies.TRANSCRIPTION_ERROR)
+            self.__user_dialog.send_message(bot_replies.TRANSCRIPTION_ERROR)
             return
 
         self.handle_text(transcribed)
@@ -45,10 +45,10 @@ class BotReviewStrategy(ReviewStrategy):
         review = ReviewAnalizer().summarize_review(text_message)
         
         if review is None:
-            self.__bot_instance.send_message(bot_replies.TRANSCRIPTION_ERROR)
+            self.__user_dialog.send_message(bot_replies.TRANSCRIPTION_ERROR)
             return
 
-        self.__bot_instance.send_message(self.__issues_to_text(review.issues))
+        self.__user_dialog.send_message(self.__issues_to_text(review.issues))
 
         if not upload_review(
             audio_review_path=self.__audio_path,
@@ -56,7 +56,7 @@ class BotReviewStrategy(ReviewStrategy):
             text_summary=review.summary,
             issues=review.issues,
         ):
-            self.__bot_instance.send_message(bot_replies.UPLOAD_ERROR)
+            self.__user_dialog.send_message(bot_replies.UPLOAD_ERROR)
 
         # QR CODE SHOULD BE SENT HERE
 

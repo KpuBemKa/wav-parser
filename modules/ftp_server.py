@@ -17,6 +17,9 @@ from settings import RECORDINGS_FOLDER, ALLOWED_EXTENSIONS, LOGGER_NAME
 logger = getLogger(LOGGER_NAME)
 
 
+rv_ctx: ReviewContext
+
+
 class CustomProtocolFTP(FTP):
     def __init__(self) -> None:
         super().__init__()
@@ -30,7 +33,7 @@ class CustomProtocolFTP(FTP):
             if not self.should_transcribe_file(audio_path):
                 return deff
 
-            ReviewContext().handle_audio(DeviceStrategy(), audio_path)
+            rv_ctx.handle_audio(DeviceStrategy(), audio_path)
 
             return deff
 
@@ -94,7 +97,10 @@ class CustomDB(FilePasswordDB):
 
 
 # Start the FTP server
-def start_ftp_server():
+def start_ftp_server(context: ReviewContext):
+    global rv_ctx
+    rv_ctx = context
+
     p = Portal(FTPRealm(anonymousRoot="./", userHome="./home"), [CustomDB("static/pass.dat")])
 
     f = FTPFactory(p)

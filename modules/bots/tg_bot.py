@@ -24,12 +24,14 @@ from settings import TELEGRAM_AUDIO_DIR, LOGGER_NAME
 from keys import TELEGRAM_BOT_TOKEN
 
 
+
 logger__ = getLogger(LOGGER_NAME)
+rv_ctx: ReviewContext
 
 
 class TelegramUserDialog(UserDialog):
-    def __init__(self, event_loop: asyncio.AbstractEventLoop, message: Message) -> None:
-        self.event_loop = event_loop
+    def __init__(self, message: Message) -> None:
+        # self.event_loop = event_loop
         self.__message = message
 
     def send_message(self, message: str) -> None:
@@ -42,10 +44,10 @@ class TelegramUserDialog(UserDialog):
             self.__async_to_sync(self.__message.reply_photo(image, caption=bot_replies.START_REPLY))
 
     def __async_to_sync(self, awaitable_target):
-        # loop = asyncio.new_event_loop()
-        # self.event_loop.create_task(awaitable_target()).add_done_callback(lambda t: print("Done"))
-        # loop.close()
-        return asyncio.run_coroutine_threadsafe(awaitable_target, self.event_loop).result()
+        loop = asyncio.new_event_loop()
+        loop.create_task(awaitable_target()).add_done_callback(lambda t: print("Done"))
+        loop.close()
+        # return asyncio.run_coroutine_threadsafe(awaitable_target, self.event_loop).result()
 
 
 async def __start(update: Update, context: CallbackContext):
@@ -112,8 +114,8 @@ async def __handle_audio(update: Update, context: CallbackContext):
     await file_info.download_to_drive(file_path.absolute().as_posix())
 
     # Transcribe it, and upload it
-    ReviewContext().handle_audio(
-        BotReviewStrategy(TelegramUserDialog(asyncio.get_running_loop(), update.message)), file_path
+    rv_ctx.handle_audio(
+        BotReviewStrategy(TelegramUserDialog(update.message)), file_path
     )
 
     # Wait for the reply to be delivered
@@ -133,8 +135,8 @@ async def __handle_text(update: Update, context: CallbackContext):
     reply_await = update.message.reply_text(bot_replies.REVIEW_ACCEPTED)
 
     # Transcribe it, and upload it
-    ReviewContext().handle_text(
-        BotReviewStrategy(TelegramUserDialog(asyncio.get_running_loop(), update.message)),
+    rv_ctx.handle_text(
+        BotReviewStrategy(TelegramUserDialog(update.message)),
         update.message.text,
     )
 
@@ -172,8 +174,11 @@ async def __error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) ->
     # )
 
 
-def start_telegram_bot():
+def start_telegram_bot(context: ReviewContext):
     """Starts the Telegram bot in a blocking manner"""
+
+    global rv_ctx
+    rv_ctx = context
 
     # Initialize Application instead of Updater
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
