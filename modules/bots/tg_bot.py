@@ -1,6 +1,8 @@
 import asyncio
 import traceback
 import json
+import threading
+import time
 
 from logging import getLogger
 from pathlib import Path
@@ -143,12 +145,51 @@ class TelegramBot:
         # Reply to the user that his audio has been received
         reply_await = update.message.reply_text(bot_replies.REVIEW_ACCEPTED)
 
-        # Transcribe it, and upload it
-        result_await = self.__wait_for_result(self.__review_pipe.queue_text(update.message.text))
+        thread = threading.Thread(
+            target=self.__wait_for_uuid,
+            args=(self.__review_pipe.queue_text(update.message.text), update.message),
+            daemon=True,
+        )
 
         (_, review_result) = await asyncio.gather(reply_await, result_await)
 
-        await self.__handle_review_result(update.message, review_result)
+        # # Transcribe it, and upload it
+        # result_await = self.__wait_for_result(self.__review_pipe.queue_text(update.message.text))
+
+        # (_, review_result) = asyncio.gather(reply_await, result_await)
+
+        # await self.__handle_review_result(update.message, review_result)
+
+    def __wait_for_uuid(self, uuid: UUID, user_message: Message):
+        while True:
+            time.sleep(5)
+
+            loop = asyncio.get_event_loop()
+
+            review_result = self.__review_pipe.get_result_by_uuid(uuid)
+            if review_result is None:
+                continue
+
+            if not review_result.completed:
+                loop.run_until_complete(user_message.reply_text(bot_replies.TRANSCRIPTION_ERROR))
+                return
+
+            if not upload_review(
+                audio_review_path=None,
+                text_review=review_result.corrected_text,
+                text_summary=review_result.summary,
+                issues=review_result.issues,
+            ):
+                loop.run_until_complete(user_message.reply_text(bot_replies.UPLOAD_ERROR))
+                return
+
+            loop.run_until_complete(
+                user_message.reply_text(
+                    self.__issues_to_text(review_result.issues), reply_to_message_id=user_message.id
+                )
+            )
+
+            return
 
     async def __error_handler(self, update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Log the error and send a telegram message to notify the developer."""
