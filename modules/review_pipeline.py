@@ -2,7 +2,7 @@ from pathlib import Path
 from time import sleep
 from logging import getLogger
 from uuid import uuid4 as generateUUID4, UUID
-from multiprocessing import Lock
+from multiprocessing import Lock, Queue
 
 # from .review_strategy import ReviewStrategy
 from modules.ais.audio_transcriber import AudioTranscriber
@@ -25,9 +25,9 @@ class ReviewPipeline:
         text_queue,
         result_queue,
     ) -> None:
-        self.__audio_queue = audio_queue
-        self.__text_queue = text_queue
-        self.__result_list: list[tuple[UUID, ReviewResult]] = result_queue
+        self.__audio_queue: Queue[tuple[UUID, Path]] = audio_queue
+        self.__text_queue: Queue[tuple[UUID, str]] = text_queue
+        self.__result_list: dict[UUID, ReviewResult] = result_queue
         self.__results_lock = Lock()
 
     def queue_audio(self, audio_path: Path) -> UUID:
@@ -48,27 +48,30 @@ class ReviewPipeline:
 
     def get_result_by_uuid(self, uuid: UUID) -> ReviewResult | None:
         with self.__results_lock:
-            for item in self.__result_list:
-                if item[0] == uuid:
-                    result = item[1]
-                    self.__result_list.remove(item)
-                    return result
+            if uuid in self.__result_list:
+                return self.__result_list.pop(uuid)
+            # for _uuid in self.__result_list:
+            #     if _uuid == uuid:
+            #         return _result
 
     def thread_executor(self) -> None:
         AudioTranscriber()
         ReviewAnalizer()
 
         while True:
-            audio_available = not self.__audio_queue.empty()
-            text_available = not self.__text_queue.empty()
-
-            if audio_available:
+            if not self.__audio_queue.empty():
                 (uuid, audio_path) = self.__audio_queue.get()
-                self.__result_list.append((uuid, self.__handle_audio(audio_path)))
+                result = self.__handle_audio(audio_path)
 
-            if text_available:
+                with self.__results_lock:
+                    self.__result_list[uuid] = result
+
+            if not self.__text_queue.empty():
                 (uuid, text_review) = self.__text_queue.get()
-                self.__result_list.append((uuid, self.__handle_text(text_review)))
+                result = self.__handle_text(text_review)
+
+                with self.__results_lock:
+                    self.__result_list[uuid] = result
 
             sleep(1)
 

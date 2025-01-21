@@ -146,7 +146,7 @@ class TelegramBot:
         # Transcribe it, and upload it
         result_await = self.__wait_for_result(self.__review_pipe.queue_text(update.message.text))
 
-        (_, review_result) = asyncio.gather(reply_await, result_await)
+        (_, review_result) = await asyncio.gather(reply_await, result_await)
 
         await self.__handle_review_result(update.message, review_result)
 
@@ -182,11 +182,11 @@ class TelegramBot:
 
     async def __wait_for_result(self, uuid: UUID) -> ReviewResult:
         while True:
-            await asyncio.sleep(5)
-
             review_result = self.__review_pipe.get_result_by_uuid(uuid)
             if review_result is not None:
                 return review_result
+            
+            await asyncio.sleep(3)
 
     async def __handle_review_result(
         self,
