@@ -1,22 +1,19 @@
 from pathlib import Path
-from collections.abc import Callable
-from multiprocessing import Lock, Queue
 from time import sleep
 from logging import getLogger
 from uuid import uuid4 as generateUUID4, UUID
+from multiprocessing import Lock
 
 # from .review_strategy import ReviewStrategy
 from modules.ais.audio_transcriber import AudioTranscriber
 from modules.ais.review_analizer import ReviewAnalizer
-from modules.models.review_result import ReviewResult, Issue
-from modules.models.issue_department import IssueDepartment
+from modules.models.review_result import ReviewResult
 from modules.endpoints.upload_review import upload_review
 
 from settings import LOGGER_NAME
 
 
 logger = getLogger(LOGGER_NAME)
-DONE_CALLBACK_TYPE = Callable[[ReviewResult | None], None]
 
 
 class ReviewPipeline:
@@ -32,6 +29,7 @@ class ReviewPipeline:
         self.__audio_queue = audio_queue
         self.__text_queue = text_queue
         self.__result_list = result_queue
+        self.__results_lock = Lock()
 
     def queue_audio(self, audio_path: Path) -> UUID:
         work_uuid = generateUUID4()
@@ -49,8 +47,11 @@ class ReviewPipeline:
         logger.debug(f"Queued to analize text:\n{text_review}\n---")
         return work_uuid
 
-    def get_result_list(self):
-        return self.__result_list
+    def get_result_by_uuid(self, uuid: UUID) -> ReviewResult | None:
+        with self.__results_lock:
+            for item in self.__result_list:
+                if item[0] == uuid:
+                    return item[1]
 
     def thread_executor(self) -> None:
         AudioTranscriber()
@@ -70,32 +71,22 @@ class ReviewPipeline:
 
             sleep(1)
 
-    def __handle_audio(self, audio_path: Path) -> ReviewResult | None:
+    def __handle_audio(self, audio_path: Path) -> ReviewResult:
         transcribed = AudioTranscriber().transcribe_audio(audio_path)
 
         if transcribed is None:
             logger.warning("Transcription returned an empty value. Error?")
-            return
+            return ReviewResult(completed=False)
 
-        self.__handle_text(transcribed, audio_path)
+        return self.__handle_text(transcribed)
 
-    def __handle_text(
-        self, text_message: str, audio_path: Path | None = None
-    ) -> ReviewResult | None:
+    def __handle_text(self, text_message: str) -> ReviewResult:
         # return ReviewResult("a", "b", [Issue("c", IssueDepartment.BAR)])
 
         review = ReviewAnalizer().summarize_review(text_message)
 
         if review is None:
             logger.warning("Analyzer returned an empty value. Error?")
-            return
+            return ReviewResult(completed=False)
 
-        if upload_review(
-            audio_review_path=audio_path,
-            text_review=review.corrected_text,
-            text_summary=review.summary,
-            issues=review.issues,
-        ):
-            return review
-
-        # QR CODE SHOULD BE SENT HERE
+        return review

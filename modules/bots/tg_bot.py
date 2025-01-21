@@ -19,13 +19,13 @@ from telegram.ext import (
 
 from . import bot_replies
 from modules.models.issue import Issue
-from modules.reviewing.review_pipeline import ReviewPipeline, ReviewResult, DONE_CALLBACK_TYPE, UUID
+from modules.reviewing.review_pipeline import ReviewPipeline, ReviewResult, UUID
+from modules.endpoints.upload_review import upload_review
 from settings import TELEGRAM_AUDIO_DIR, LOGGER_NAME
 from keys import TELEGRAM_BOT_TOKEN
 
 
 logger__ = getLogger(LOGGER_NAME)
-# rv_ctx: ReviewContext
 
 
 class ReviewResultHandler:
@@ -125,12 +125,11 @@ class TelegramBot:
         await file_info.download_to_drive(file_path.absolute().as_posix())
 
         # Transcribe it, and upload it
-        self.__review_pipe.queue_audio(
-            file_path, ReviewResultHandler(update.message).review_done_callback
-        )
+        result_await = self.__wait_for_result(self.__review_pipe.queue_audio(file_path))
 
-        # Wait for the reply to be delivered
-        await reply_await
+        (_, review_result) = await asyncio.gather(reply_await, result_await)
+
+        await self.__handle_review_result(update.message, review_result)
 
     async def __handle_text(self, update: Update, context: CallbackContext):
         if update.message is None:
@@ -145,11 +144,11 @@ class TelegramBot:
         reply_await = update.message.reply_text(bot_replies.REVIEW_ACCEPTED)
 
         # Transcribe it, and upload it
-        result = await self.__wait_for_result(self.__review_pipe.queue_text(update.message.text))
+        result_await = self.__wait_for_result(self.__review_pipe.queue_text(update.message.text))
 
-        await update.message.reply_text(result.summary if result is not None else "ayyo")
+        (_, review_result) = asyncio.gather(reply_await, result_await)
 
-        await reply_await
+        await self.__handle_review_result(update.message, review_result)
 
     async def __error_handler(self, update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Log the error and send a telegram message to notify the developer."""
@@ -188,6 +187,31 @@ class TelegramBot:
             for _uuid, _result in self.__review_pipe.get_result_list():
                 if uuid == _uuid:
                     return _result
+
+    async def __handle_review_result(
+        self,
+        user_message: Message,
+        review_result: ReviewResult | None,
+        audio_path: Path | None = None,
+    ):
+        if review_result is None:
+            await user_message.reply_text(bot_replies.TRANSCRIPTION_ERROR)
+            return
+
+        if not upload_review(
+            audio_review_path=audio_path,
+            text_review=review_result.corrected_text,
+            text_summary=review_result.summary,
+            issues=review_result.issues,
+        ):
+            await user_message.reply_text(bot_replies.UPLOAD_ERROR)
+            return
+
+        await user_message.reply_text(
+            f"{bot_replies.TRANSCRIPTION_DONE_WITH_ISSUES}\n{self.__issues_to_text(review_result.issues)}"
+            if review_result is not None
+            else bot_replies.TRANSCRIPTION_DONE_NO_ISSUES
+        )
 
     def __issues_to_text(self, issues: list[Issue]) -> str:
         if len(issues) == 0:

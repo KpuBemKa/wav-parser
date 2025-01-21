@@ -9,6 +9,12 @@ from modules.log import setup_custom_logger
 from settings import LOGGER_NAME
 
 
+"""
+TODO
+- timeout for wait for result
+"""
+
+
 logger = setup_custom_logger(LOGGER_NAME)
 
 
