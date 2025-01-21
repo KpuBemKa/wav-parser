@@ -8,7 +8,6 @@ from multiprocessing import Lock
 from modules.ais.audio_transcriber import AudioTranscriber
 from modules.ais.review_analizer import ReviewAnalizer
 from modules.models.review_result import ReviewResult
-from modules.endpoints.upload_review import upload_review
 
 from settings import LOGGER_NAME
 
@@ -21,14 +20,14 @@ class ReviewPipeline:
         self,
         # audio_queue: Queue[tuple[UUID, Path]],
         # text_queue: Queue[tuple[UUID, str]],
-        # result_queue: list[tuple[UUID, ReviewResult | None]],
+        # result_queue: list[tuple[UUID, ReviewResult]],
         audio_queue,
         text_queue,
         result_queue,
     ) -> None:
         self.__audio_queue = audio_queue
         self.__text_queue = text_queue
-        self.__result_list = result_queue
+        self.__result_list: list[tuple[UUID, ReviewResult]] = result_queue
         self.__results_lock = Lock()
 
     def queue_audio(self, audio_path: Path) -> UUID:
@@ -51,7 +50,9 @@ class ReviewPipeline:
         with self.__results_lock:
             for item in self.__result_list:
                 if item[0] == uuid:
-                    return item[1]
+                    result = item[1]
+                    self.__result_list.remove(item)
+                    return result
 
     def thread_executor(self) -> None:
         AudioTranscriber()
@@ -75,18 +76,16 @@ class ReviewPipeline:
         transcribed = AudioTranscriber().transcribe_audio(audio_path)
 
         if transcribed is None:
-            logger.warning("Transcription returned an empty value. Error?")
+            logger.error("Transcription returned an empty value. Error?")
             return ReviewResult(completed=False)
 
         return self.__handle_text(transcribed)
 
     def __handle_text(self, text_message: str) -> ReviewResult:
-        # return ReviewResult("a", "b", [Issue("c", IssueDepartment.BAR)])
-
         review = ReviewAnalizer().summarize_review(text_message)
 
         if review is None:
-            logger.warning("Analyzer returned an empty value. Error?")
+            logger.error("Analyzer returned an empty value. Error?")
             return ReviewResult(completed=False)
 
         return review

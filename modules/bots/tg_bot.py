@@ -19,8 +19,8 @@ from telegram.ext import (
 
 from . import bot_replies
 from modules.models.issue import Issue
-from modules.reviewing.review_pipeline import ReviewPipeline, ReviewResult, UUID
-from modules.endpoints.upload_review import upload_review
+from modules.review_pipeline import ReviewPipeline, ReviewResult, UUID
+from modules.upload_review import upload_review
 from settings import TELEGRAM_AUDIO_DIR, LOGGER_NAME
 from keys import TELEGRAM_BOT_TOKEN
 
@@ -180,21 +180,21 @@ class TelegramBot:
         #     chat_id=DEVELOPER_CHAT_ID, text=message, parse_mode=ParseMode.HTML
         # )
 
-    async def __wait_for_result(self, uuid: UUID) -> ReviewResult | None:
+    async def __wait_for_result(self, uuid: UUID) -> ReviewResult:
         while True:
-            await asyncio.sleep(1)
+            await asyncio.sleep(5)
 
-            for _uuid, _result in self.__review_pipe.get_result_list():
-                if uuid == _uuid:
-                    return _result
+            review_result = self.__review_pipe.get_result_by_uuid(uuid)
+            if review_result is not None:
+                return review_result
 
     async def __handle_review_result(
         self,
         user_message: Message,
-        review_result: ReviewResult | None,
+        review_result: ReviewResult,
         audio_path: Path | None = None,
     ):
-        if review_result is None:
+        if not review_result.completed:
             await user_message.reply_text(bot_replies.TRANSCRIPTION_ERROR)
             return
 
@@ -208,9 +208,7 @@ class TelegramBot:
             return
 
         await user_message.reply_text(
-            f"{bot_replies.TRANSCRIPTION_DONE_WITH_ISSUES}\n{self.__issues_to_text(review_result.issues)}"
-            if review_result is not None
-            else bot_replies.TRANSCRIPTION_DONE_NO_ISSUES
+            self.__issues_to_text(review_result.issues), reply_to_message_id=user_message.id
         )
 
     def __issues_to_text(self, issues: list[Issue]) -> str:

@@ -9,7 +9,8 @@ from twisted.protocols.ftp import FTPFactory, FTPRealm, FTP
 from twisted.cred import credentials, error
 from twisted.internet import defer
 
-from modules.reviewing.review_pipeline import ReviewPipeline, UUID, ReviewResult
+from .review_pipeline import ReviewPipeline, UUID, ReviewResult
+from .upload_review import upload_review
 
 from settings import RECORDINGS_FOLDER, ALLOWED_EXTENSIONS, LOGGER_NAME
 
@@ -23,7 +24,7 @@ rv_ctx: ReviewPipeline
 class CustomProtocolFTP(FTP):
     def __init__(self) -> None:
         super().__init__()
-        self.__result__uuids: list[UUID] = []
+        self.__result__uuids: list[tuple[UUID, Path]] = []
         self.__results_lock = Lock()
 
     def ftp_STOR(self, path):
@@ -35,7 +36,7 @@ class CustomProtocolFTP(FTP):
             if not self.__should_transcribe_file(audio_path):
                 return deff
 
-            self.__result__uuids.append(rv_ctx.queue_audio(audio_path))
+            self.__result__uuids.append((rv_ctx.queue_audio(audio_path), audio_path))
 
             return deff
 
@@ -51,36 +52,34 @@ class CustomProtocolFTP(FTP):
             return False
 
         return True
-    
+
     def __review_result_watcher(self):
         while True:
             with self.__results_lock:
                 if len(self.__result__uuids) == 0:
                     continue
-                
-                for item in self.__result__uuids:
-                    review_result = rv_ctx.get_result_by_uuid(item)
-                    
-                    if review_result is None:
-                        logger.warning("ReviewResult is None. Error?")
-                        
+
+                for uuid, audio_path in self.__result__uuids:
+                    review_result = rv_ctx.get_result_by_uuid(uuid)
+
+                    if review_result is not None:
+                        self.__handle_review_result(review_result, audio_path)
+
     def __handle_review_result(
         self,
         review_result: ReviewResult,
         audio_path: Path | None = None,
     ):
-        if review_result is None:
-            await user_message.reply_text(bot_replies.TRANSCRIPTION_ERROR)
+        if not review_result.completed:
+            logger.error("Review result was not completed. Perhaps an error occured.")
             return
 
-        if not upload_review(
+        upload_review(
             audio_review_path=audio_path,
             text_review=review_result.corrected_text,
             text_summary=review_result.summary,
             issues=review_result.issues,
-        ):
-            await user_message.reply_text(bot_replies.UPLOAD_ERROR)
-            return
+        )
 
 
 class CustomDB(FilePasswordDB):

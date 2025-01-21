@@ -4,7 +4,7 @@ from threading import Thread
 
 from modules.bots.tg_bot import start_tg_bot
 from modules.ftp_server import start_ftp_server
-from modules.reviewing.review_pipeline import ReviewPipeline
+from modules.review_pipeline import ReviewPipeline
 from modules.log import setup_custom_logger
 from settings import LOGGER_NAME
 
