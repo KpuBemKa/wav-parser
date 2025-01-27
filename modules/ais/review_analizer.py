@@ -10,7 +10,7 @@ from settings import LOGGER_NAME
 
 
 logger = getLogger(LOGGER_NAME)
-MODEL = "llama3.2:3b"
+MODEL = "mistral:7b"
 
 
 class ReviewAnalizer(metaclass=SingletonMeta):

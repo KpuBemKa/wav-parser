@@ -13,7 +13,8 @@ from settings import DELETE_CONVERTED_FILES, LOGGER_NAME
 
 logger = getLogger(LOGGER_NAME)
 
-
+# select checkpoint from https://huggingface.co/openai/whisper-large-v3#model-details,
+MODEL = "openai/whisper-large-v3-turbo"
 FAST_WHISPER_ARGS = {
     "language": "en",
     # "task": "translate",
@@ -28,12 +29,10 @@ class AudioTranscriber(metaclass=SingletonMeta):
         device_int = 0 if device == "cuda" else -1
         torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
         attn_impl = "spda"
-        # model="openai/whisper-base",  # select checkpoint from https://huggingface.co/openai/whisper-large-v3#model-details,
-        model = "openai/whisper-large-v3-turbo"
 
         self.__pipe = pipeline(
             "automatic-speech-recognition",
-            model=model,
+            model=MODEL,
             torch_dtype=torch_dtype,
             chunk_length_s=30,
             batch_size=1,
