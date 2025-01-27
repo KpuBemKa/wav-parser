@@ -1,6 +1,6 @@
 from pathlib import Path
 from logging import getLogger
-from threading import Lock
+from threading import Lock, Thread
 
 from twisted.cred.checkers import FilePasswordDB
 from twisted.cred.portal import Portal
@@ -24,8 +24,11 @@ rv_ctx: ReviewPipeline
 class CustomProtocolFTP(FTP):
     def __init__(self) -> None:
         super().__init__()
-        self.__result__uuids: list[tuple[UUID, Path]] = []
+        self.__result_uuids: dict[UUID, Path] = {}
         self.__results_lock = Lock()
+        self.__thread = Thread(target=self.__review_result_watcher, daemon=True)
+
+        self.__thread.start()
 
     def ftp_STOR(self, path):
         deff = super(CustomProtocolFTP, self).ftp_STOR(path)
@@ -36,7 +39,8 @@ class CustomProtocolFTP(FTP):
             if not self.__should_transcribe_file(audio_path):
                 return deff
 
-            self.__result__uuids.append((rv_ctx.queue_audio(audio_path), audio_path))
+            with self.__results_lock:
+                self.__result_uuids[rv_ctx.queue_audio(audio_path)] = audio_path
 
             return deff
 
@@ -55,15 +59,19 @@ class CustomProtocolFTP(FTP):
 
     def __review_result_watcher(self):
         while True:
-            with self.__results_lock:
-                if len(self.__result__uuids) == 0:
-                    continue
+            uuids: list[tuple[UUID, ReviewResult]] = []
 
-                for uuid, audio_path in self.__result__uuids:
-                    review_result = rv_ctx.get_result_by_uuid(uuid)
+            with self.__results_lock:
+                for _uuid in self.__result_uuids:
+                    review_result = rv_ctx.get_result_by_uuid(_uuid)
 
                     if review_result is not None:
-                        self.__handle_review_result(review_result, audio_path)
+                        uuids.append((_uuid, review_result))
+
+            for _uuid, _review_result in uuids:
+                self.__handle_review_result(_review_result, self.__result_uuids[_uuid])
+
+                self.__result_uuids.pop(_uuid)
 
     def __handle_review_result(
         self,
