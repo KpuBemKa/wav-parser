@@ -23,11 +23,11 @@ class ReviewPipeline:
         # result_queue: list[tuple[UUID, ReviewResult]],
         audio_queue,
         text_queue,
-        result_queue,
+        results_dict,
     ) -> None:
         self.__audio_queue: Queue[tuple[UUID, Path]] = audio_queue
         self.__text_queue: Queue[tuple[UUID, str]] = text_queue
-        self.__result_list: dict[UUID, ReviewResult] = result_queue
+        self.__result_list: dict[UUID, ReviewResult] = results_dict
         self.__results_lock = Lock()
 
     def queue_audio(self, audio_path: Path) -> UUID:

@@ -1,10 +1,10 @@
 import asyncio
 import traceback
 import json
-import threading
 import time
 
 from logging import getLogger
+from threading import Lock, Thread
 from pathlib import Path
 from time import time as getTime
 # from asyncio import create_task as createTask, get_running_loop as getRunningLoop
@@ -30,20 +30,14 @@ from keys import TELEGRAM_BOT_TOKEN
 logger__ = getLogger(LOGGER_NAME)
 
 
-class ReviewResultHandler:
-    def __init__(self, message: Message):
-        self.__message = message
-
-    def review_done_callback(self, review_result: ReviewResult | None):
-        # if review_result is None:
-        #     self
-        print("ayyo")
-        asyncio.get_event_loop().create_task(self.__message.reply_text("ayyo"))
-
-
 class TelegramBot:
     def __init__(self, review_pipeline: ReviewPipeline):
         self.__review_pipe = review_pipeline
+        self.__result_uuids: dict[UUID, tuple[Path | None, Message]] = {}
+        self.__results_lock = Lock()
+        self.__thread = Thread(target=self.__review_result_watcher, daemon=True)
+
+        self.__thread.start()
 
     def start_telegram_bot(self):
         """Starts the Telegram bot in a blocking manner"""
@@ -82,7 +76,9 @@ class TelegramBot:
 
         # Check if an audio has been uploaded
         if file is None:
-            await update.message.reply_text(bot_replies.ATTACHEMENT_DENIED)
+            await update.message.reply_text(
+                bot_replies.ATTACHEMENT_DENIED, reply_to_message_id=update.message.id
+            )
             return
 
         # Start the file download
@@ -96,13 +92,17 @@ class TelegramBot:
             file_name = "voice.ogg"
 
         if file_name is None:
-            await update.message.reply_text(bot_replies.ATTACHEMENT_DENIED)
+            await update.message.reply_text(
+                bot_replies.ATTACHEMENT_DENIED, reply_to_message_id=update.message.id
+            )
             return
 
         # Check if file extension is supported
         file_ext = file_name[file_name.rfind(".") :]
         if file_ext not in [".wav", ".ogg", ".mp3"]:
-            await update.message.reply_text(f"{bot_replies.ATTACHEMENT_DENIED}{file_ext}")
+            await update.message.reply_text(
+                f"{bot_replies.ATTACHEMENT_DENIED}{file_ext}", reply_to_message_id=update.message.id
+            )
             return
 
         # Get sender's username
@@ -120,18 +120,21 @@ class TelegramBot:
         file_info: File = await file_info_await
 
         # Reply to the user that his audio has been received
-        reply_await = update.message.reply_text(bot_replies.REVIEW_ACCEPTED)
+        reply_await = update.message.reply_text(
+            bot_replies.REVIEW_ACCEPTED, reply_to_message_id=update.message.id
+        )
 
         # Download the file
         file_path = TELEGRAM_AUDIO_DIR / new_file_name
         await file_info.download_to_drive(file_path.absolute().as_posix())
 
-        # Transcribe it, and upload it
-        result_await = self.__wait_for_result(self.__review_pipe.queue_audio(file_path))
+        with self.__results_lock:
+            self.__result_uuids[self.__review_pipe.queue_audio(file_path)] = (
+                file_path,
+                update.message,
+            )
 
-        (_, review_result) = await asyncio.gather(reply_await, result_await)
-
-        await self.__handle_review_result(update.message, review_result)
+        await reply_await
 
     async def __handle_text(self, update: Update, context: CallbackContext):
         if update.message is None:
@@ -143,15 +146,19 @@ class TelegramBot:
             return
 
         # Reply to the user that his audio has been received
-        reply_await = update.message.reply_text(bot_replies.REVIEW_ACCEPTED)
-
-        thread = threading.Thread(
-            target=self.__wait_for_uuid,
-            args=(self.__review_pipe.queue_text(update.message.text), update.message),
-            daemon=True,
+        reply_await = update.message.reply_text(
+            bot_replies.REVIEW_ACCEPTED, reply_to_message_id=update.message.id
         )
 
-        (_, review_result) = await asyncio.gather(reply_await, result_await)
+        with self.__results_lock:
+            self.__result_uuids[self.__review_pipe.queue_text(update.message.text)] = (
+                None,
+                update.message,
+            )
+
+        await reply_await
+
+        # (_, review_result) = await asyncio.gather(reply_await, result_await)
 
         # # Transcribe it, and upload it
         # result_await = self.__wait_for_result(self.__review_pipe.queue_text(update.message.text))
@@ -160,36 +167,30 @@ class TelegramBot:
 
         # await self.__handle_review_result(update.message, review_result)
 
-    def __wait_for_uuid(self, uuid: UUID, user_message: Message):
+    def __review_result_watcher(self):
         while True:
             time.sleep(5)
 
-            loop = asyncio.get_event_loop()
+            uuids: list[tuple[UUID, ReviewResult]] = []
 
-            review_result = self.__review_pipe.get_result_by_uuid(uuid)
-            if review_result is None:
-                continue
+            with self.__results_lock:
+                for _uuid in self.__result_uuids:
+                    review_result = self.__review_pipe.get_result_by_uuid(_uuid)
 
-            if not review_result.completed:
-                loop.run_until_complete(user_message.reply_text(bot_replies.TRANSCRIPTION_ERROR))
-                return
+                    if review_result is not None:
+                        uuids.append((_uuid, review_result))
 
-            if not upload_review(
-                audio_review_path=None,
-                text_review=review_result.corrected_text,
-                text_summary=review_result.summary,
-                issues=review_result.issues,
-            ):
-                loop.run_until_complete(user_message.reply_text(bot_replies.UPLOAD_ERROR))
-                return
-
-            loop.run_until_complete(
-                user_message.reply_text(
-                    self.__issues_to_text(review_result.issues), reply_to_message_id=user_message.id
+            loop = asyncio.new_event_loop()
+            for _uuid, _review_result in uuids:
+                loop.run_until_complete(
+                    self.__handle_review_result(
+                        user_message=self.__result_uuids[_uuid][1],
+                        review_result=_review_result,
+                        audio_path=self.__result_uuids[_uuid][0],
+                    )
                 )
-            )
 
-            return
+                self.__result_uuids.pop(_uuid)
 
     async def __error_handler(self, update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Log the error and send a telegram message to notify the developer."""
@@ -221,14 +222,6 @@ class TelegramBot:
         #     chat_id=DEVELOPER_CHAT_ID, text=message, parse_mode=ParseMode.HTML
         # )
 
-    async def __wait_for_result(self, uuid: UUID) -> ReviewResult:
-        while True:
-            review_result = self.__review_pipe.get_result_by_uuid(uuid)
-            if review_result is not None:
-                return review_result
-            
-            await asyncio.sleep(3)
-
     async def __handle_review_result(
         self,
         user_message: Message,
@@ -236,7 +229,9 @@ class TelegramBot:
         audio_path: Path | None = None,
     ):
         if not review_result.completed:
-            await user_message.reply_text(bot_replies.TRANSCRIPTION_ERROR)
+            await user_message.reply_text(
+                bot_replies.TRANSCRIPTION_ERROR, reply_to_message_id=user_message.id
+            )
             return
 
         if not upload_review(
@@ -245,7 +240,9 @@ class TelegramBot:
             text_summary=review_result.summary,
             issues=review_result.issues,
         ):
-            await user_message.reply_text(bot_replies.UPLOAD_ERROR)
+            await user_message.reply_text(
+                bot_replies.UPLOAD_ERROR, reply_to_message_id=user_message.id
+            )
             return
 
         await user_message.reply_text(

@@ -18,10 +18,9 @@ class ReviewAnalizer(metaclass=SingletonMeta):
         self.__ensure_existence(model_name)
 
     def summarize_review(self, text: str) -> ReviewResult | None:
+       
         try:
-            corrected_text = self.__get_corrected_translated(
-                text.replace("\n", " ").replace("  ", " ")
-            )
+            corrected_text = self.__get_corrected_translated(text.replace("  ", " "))
             summarry = self.__get_summary(corrected_text)
             issues = self.__get_issues(corrected_text)
 
@@ -53,7 +52,7 @@ class ReviewAnalizer(metaclass=SingletonMeta):
                     "Give me the corrected text wihout any additional text, headers, or phrases. "
                     "Input review: "
                     f"{text}"
-                ).strip(" \n")
+                )
             ).message.content
         )
 
@@ -65,7 +64,7 @@ class ReviewAnalizer(metaclass=SingletonMeta):
                     "Give me the translated text wihout any additional text, headers, or phrases. "
                     "Input review: "
                     f"{corrected}"
-                ).strip(" \n")
+                )
             ).message.content
         )
 
@@ -80,7 +79,7 @@ class ReviewAnalizer(metaclass=SingletonMeta):
                     "Give me the summary wihout any additional text, headers, or phrases. "
                     "Input review: "
                     f"{text}"
-                ).strip(" \n")
+                )
             ).message.content
         )
 
@@ -96,7 +95,7 @@ class ReviewAnalizer(metaclass=SingletonMeta):
                     'If you think there are no issues related to restaurants, respond with "None". '
                     "Input review: "
                     f"{text}"
-                ).strip(" \n")
+                )
             ).message.content
         ).split("\n")
 
@@ -123,7 +122,7 @@ class ReviewAnalizer(metaclass=SingletonMeta):
                     "Give me the result wihout any additional text, headers, or phrases. "
                     "Here is the issue: "
                     f"{issue_description}"
-                ).strip(" \n")
+                )
             ).message.content
         ).lower()
 

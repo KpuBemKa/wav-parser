@@ -28,9 +28,9 @@ if __name__ == "__main__":
     with ContextManager() as manager:
         audio_queue = Manager().Queue()
         text_queue = Manager().Queue()
-        result_list = Manager().dict()
+        results_dict = Manager().dict()
         shared_review_context: ReviewPipeline = manager.ReviewPipeline(
-            audio_queue, text_queue, result_list
+            audio_queue, text_queue, results_dict
         )
 
         review_context_thread = Thread(target=shared_review_context.thread_executor, name="Review")

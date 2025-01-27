@@ -6,7 +6,7 @@ START_REPLY = (
 START_ATTACHEMENT_PATH = "static/start-attachement.jpg"
 
 ATTACHEMENT_DENIED = "Sorry, I can accept only text or Voice Notes 🎙"
-FILETYPE_DENIED = "Sorry, I can accept only text or Voice Notes 🎙"
+FILETYPE_DENIED = "Sorry, I can accept only text or Voice Notes 🎙 This filetype is not supported: "
 
 REVIEW_ACCEPTED = "Thank you for your feedback! ❤️ \n\nGive me some time to analize your review. 🫶🏼"
 
