@@ -8,13 +8,11 @@ from time import time as getTime
 from transformers import pipeline
 
 from modules.singleton_meta import SingletonMeta
-from settings import DELETE_CONVERTED_FILES, LOGGER_NAME
+from settings import DELETE_CONVERTED_FILES, LOGGER_NAME, WHISPER_MODEL
 
 
 logger = getLogger(LOGGER_NAME)
 
-# select checkpoint from https://huggingface.co/openai/whisper-large-v3#model-details,
-MODEL = "openai/whisper-large-v3-turbo"
 FAST_WHISPER_ARGS = {
     "language": "en",
     # "task": "translate",
@@ -32,7 +30,7 @@ class AudioTranscriber(metaclass=SingletonMeta):
 
         self.__pipe = pipeline(
             "automatic-speech-recognition",
-            model=MODEL,
+            model=WHISPER_MODEL,
             torch_dtype=torch_dtype,
             chunk_length_s=30,
             batch_size=1,
@@ -44,7 +42,8 @@ class AudioTranscriber(metaclass=SingletonMeta):
         )
 
         logger.info(
-            f"Running on {device} with id #{device_int}, using attn_implementation: {attn_impl}"
+            f"Running on '{device}' with id #{device_int}, "
+            f"using attn_implementation: '{attn_impl}' and data type: '{torch_dtype}'"
         )
 
     def transcribe_audio(self, audio_path: Path) -> str | None:
@@ -67,7 +66,7 @@ class AudioTranscriber(metaclass=SingletonMeta):
             transcribed_text = str(outputs["text"])
 
             logger.info(
-                f"Audio '{audio_path.as_posix()}' transcribed in {end_time - start_time} seconds."
+                f"Audio '{audio_path.as_posix()}' transcribed in {(end_time - start_time):.2f} seconds."
             )
             logger.info(f"Transcribed audio:\n{transcribed_text}")
 

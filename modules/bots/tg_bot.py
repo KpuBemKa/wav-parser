@@ -23,7 +23,7 @@ from . import bot_replies
 from modules.models.issue import Issue
 from modules.review_pipeline import ReviewPipeline, ReviewResult, UUID
 from modules.upload_review import upload_review
-from settings import TELEGRAM_AUDIO_DIR, LOGGER_NAME
+from settings import TELEGRAM_AUDIO_DIR, LOGGER_NAME, ALLOWED_EXTENSIONS
 from keys import TELEGRAM_BOT_TOKEN
 
 
@@ -99,7 +99,7 @@ class TelegramBot:
 
         # Check if file extension is supported
         file_ext = file_name[file_name.rfind(".") :]
-        if file_ext not in [".wav", ".ogg", ".mp3"]:
+        if file_ext not in ALLOWED_EXTENSIONS:
             await update.message.reply_text(
                 f"{bot_replies.ATTACHEMENT_DENIED}{file_ext}", reply_to_message_id=update.message.id
             )
@@ -257,7 +257,7 @@ class TelegramBot:
         for issue in issues:
             issues_str_list += issue.description.strip(" \n") + "\n"
 
-        return f"{bot_replies.TRANSCRIPTION_DONE_WITH_ISSUES}\n{issues_str_list}\n\n"
+        return f"{bot_replies.TRANSCRIPTION_DONE_WITH_ISSUES}\n{issues_str_list}\n"
 
 
 def start_tg_bot(pipeline: ReviewPipeline):

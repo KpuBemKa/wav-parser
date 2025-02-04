@@ -1,5 +1,5 @@
 from pathlib import Path
-from time import sleep
+from time import sleep, time as getTime
 from logging import getLogger
 from uuid import uuid4 as generateUUID4, UUID
 from multiprocessing import Lock, Queue
@@ -76,19 +76,33 @@ class ReviewPipeline:
             sleep(1)
 
     def __handle_audio(self, audio_path: Path) -> ReviewResult:
+        start_time = getTime()
+
         transcribed = AudioTranscriber().transcribe_audio(audio_path)
 
         if transcribed is None:
             logger.error("Transcription returned an empty value. Error?")
             return ReviewResult(completed=False)
 
-        return self.__handle_text(transcribed)
+        text_result = self.__handle_text(transcribed)
+
+        end_time = getTime()
+
+        logger.info(f"Audio processing took in total {(end_time - start_time):.2f} s.")
+
+        return text_result
 
     def __handle_text(self, text_message: str) -> ReviewResult:
+        start_time = getTime()
+
         review = ReviewAnalizer().summarize_review(text_message)
 
         if review is None:
             logger.error("Analyzer returned an empty value. Error?")
             return ReviewResult(completed=False)
+
+        end_time = getTime()
+
+        logger.info(f"Text processing took in total {(end_time - start_time):.2f} s.")
 
         return review
