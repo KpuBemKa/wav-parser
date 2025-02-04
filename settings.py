@@ -18,7 +18,7 @@ DELETE_CONVERTED_FILES = False
 ALLOWED_EXTENSIONS = [".wav", ".mp3", ".ogg", ".m4a"]
 
 ODOO_URL = "http://139.59.88.189:8069"
-ODOO_UPLOAD_ENDPOINT = f"{ODOO_URL}/revw/new_rec"
+ODOO_UPLOAD_ENDPOINT = f"{ODOO_URL}/rvg/new_rec"
 
 # Path to store audio files
 TELEGRAM_AUDIO_DIR = Path("./home/telegram-recordings/")

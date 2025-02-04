@@ -150,9 +150,17 @@ class TelegramBot:
             bot_replies.REVIEW_ACCEPTED, reply_to_message_id=update.message.id
         )
 
+        # Get sender's username
+        if update.message.from_user:
+            username = update.message.from_user.username
+
+        # Make username anonymous if no username was found
+        if username is None:
+            username = "Anonymous"
+
         with self.__results_lock:
             self.__result_uuids[self.__review_pipe.queue_text(update.message.text)] = (
-                None,
+                Path(f"tg@{username}_{int(getTime())}.txt"),
                 update.message,
             )
 

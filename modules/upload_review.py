@@ -13,7 +13,7 @@ logger = getLogger(LOGGER_NAME)
 
 
 def upload_review(
-    audio_review_path: Path | None, text_review: str, text_summary: str, issues: list[Issue]
+    audio_review_path: Path, text_review: str, text_summary: str, issues: list[Issue]
 ) -> bool:
     # Define the headers (use your access token for authorization)
     headers = {
@@ -22,7 +22,7 @@ def upload_review(
 
     # Prepare the data payload
     data = {
-        "file_name": audio_review_path.stem if audio_review_path is not None else "",
+        "file_name": audio_review_path.name if audio_review_path is not None else "",
         "transcription": text_review,
         "summary": text_summary,
         "issues": json.dumps([issue.to_dict() for issue in issues]),
@@ -35,23 +35,23 @@ def upload_review(
                 audio_review_path.absolute().as_posix(), "rb"
             ),  # Open the file in binary mode
         }
-        if audio_review_path is not None
+        if audio_review_path.suffix != ".txt"
         else None
     )
 
     logger.debug(
         f"Uploading to {ODOO_UPLOAD_ENDPOINT}:\n{data}\n---\nWith file: {audio_review_path}"
     )
-    return True
+    # return True
 
-    # # Send the POST request
-    # response = requests.post(ODOO_UPLOAD_ENDPOINT, headers=headers, data=data, files=files)
+    # Send the POST request
+    response = requests.post(ODOO_UPLOAD_ENDPOINT, headers=headers, data=data, files=files)
 
-    # if response.status_code == 200:
-    #     logger.info("A review has been successfuly uploaded to the remote enpoint")
-    #     return True
-    # else:
-    #     logger.error(
-    #         f"A review upload has failed: {response.status_code} | Text:\n{response.text}"
-    #     )
-    #     return False
+    if response.status_code == 200:
+        logger.info("A review has been successfuly uploaded to the remote enpoint")
+        return True
+    else:
+        logger.error(
+            f"A review upload has failed: {response.status_code} | Text:\n{response.text}"
+        )
+        return False
