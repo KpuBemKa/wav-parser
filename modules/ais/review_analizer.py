@@ -1,3 +1,4 @@
+import re
 from logging import getLogger
 from traceback import format_exc
 # from time import time as getTime
@@ -49,33 +50,47 @@ class ReviewAnalizer(metaclass=SingletonMeta):
                 print(f"Error: {e.error}")
 
     def __get_corrected_translated(self, text: str) -> str:
-        text = text.strip(" \n")
-        corrected = str(self.__execute_prompt(f"{CORRECTION_PROMPT}{text}").message.content)
-        return str(self.__execute_prompt(f"{TRANSLATE_PROMPT}{corrected}").message.content)
+        # correct the text
+        corrected = str(
+            self.__execute_prompt(
+                f"{CORRECTION_PROMPT}{self.__normalize_text(text)}"
+            ).message.content
+        )
+
+        # translate the text
+        return str(
+            self.__execute_prompt(
+                f"{TRANSLATE_PROMPT}{self.__normalize_text(corrected)}"
+            ).message.content
+        )
 
     def __get_summary(self, text: str) -> str:
-        text = text.strip(" \n")
-        return str(self.__execute_prompt(f"{SUMMARIZE_PROMPT}{text}").message.content)
+        return str(
+            self.__execute_prompt(
+                f"{SUMMARIZE_PROMPT}{self.__normalize_text(text)}"
+            ).message.content
+        )
 
     def __get_issues(self, text: str) -> list[Issue]:
-        text = text.strip(" \n")
         string_issues = str(
-            self.__execute_prompt(f"{GET_ISSUES_PROMPT}{text}").message.content
-        ).split("\n")
+            self.__execute_prompt(
+                f"{GET_ISSUES_PROMPT}{self.__normalize_text(text)}"
+            ).message.content
+        )
 
         result_issues: list[Issue] = []
-        for str_issue in string_issues:
+        for str_issue in string_issues.split("\n"):
             if "None" not in str_issue:
                 result_issues.append(Issue(str_issue, self.__get_issue_department(str_issue)))
 
         return result_issues
 
     def __get_issue_department(self, issue_description: str) -> IssueDepartment:
-        issue_description.strip(" \n")
-
         departments_str = str(
             self.__execute_prompt(f"{ISSUES_DEPARTMENTS_PROMPT}{issue_description}").message.content
         ).lower()
+
+        departments_str = self.__normalize_text(departments_str)
 
         for department in list(IssueDepartment):
             if department.value in departments_str:
@@ -99,3 +114,10 @@ class ReviewAnalizer(metaclass=SingletonMeta):
         logger.debug(f"Response:\n{result.message.content}\n-----")
 
         return result
+
+    def __normalize_text(self, text: str) -> str:
+        text = text.strip(" \n")
+        text = re.sub("\n\n+", "\n", text)
+        text = re.sub("  +", " ", text)
+
+        return text
