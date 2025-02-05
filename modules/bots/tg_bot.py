@@ -33,7 +33,7 @@ logger__ = getLogger(LOGGER_NAME)
 class TelegramBot:
     def __init__(self, review_pipeline: ReviewPipeline):
         self.__review_pipe = review_pipeline
-        self.__result_uuids: dict[UUID, tuple[Path | None, Message]] = {}
+        self.__result_uuids: dict[UUID, tuple[Path, Message]] = {}
         self.__results_lock = Lock()
         self.__thread = Thread(target=self.__review_result_watcher, daemon=True)
 
@@ -82,7 +82,7 @@ class TelegramBot:
                 )
                 return
 
-            file_info = await context.bot.get_file(file.file_id)
+            file_info: File = await context.bot.get_file(file.file_id)
 
             if update.message.audio:
                 # If file is an audio file
@@ -235,7 +235,7 @@ class TelegramBot:
         self,
         user_message: Message,
         review_result: ReviewResult,
-        audio_path: Path | None = None,
+        audio_path: Path,
     ):
         if not review_result.completed:
             await user_message.reply_text(
