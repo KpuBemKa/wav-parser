@@ -10,8 +10,8 @@ FILETYPE_DENIED = "Sorry, I can accept only text or Voice Notes 🎙 This filety
 
 REVIEW_ACCEPTED = "Well received! 👍 \nGive me some time to process your review ⭐️ \nIt will take just a minute 🕑\n\nProcessing..."
 
-RETREIVE_ERROR = (
-    "Sorry, There was an error retreiving your review.\n"
+RETRIEVE_ERROR = (
+    "Sorry, There was an error retrieving your review.\n"
     "Could you please report this incident to our team and try again later?"
 )
 TRANSCRIPTION_ERROR = (

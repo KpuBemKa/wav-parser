@@ -135,7 +135,7 @@ class TelegramBot:
         
         except error.TimedOut or error.NetworkError as ex:
             logger__.error(f"Timeout: {ex}:\n{traceback.format_exc()}")
-            await update.message.reply_text(bot_replies.RETREIVE_ERROR)
+            await update.message.reply_text(bot_replies.RETRIEVE_ERROR)
 
     async def __handle_text(self, update: Update, context: CallbackContext):
         if update.message is None:
