@@ -9,7 +9,7 @@ from pathlib import Path
 from time import time as getTime
 # from asyncio import create_task as createTask, get_running_loop as getRunningLoop
 
-from telegram import Update, File, Message
+from telegram import Update, File, Message, error
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -71,70 +71,71 @@ class TelegramBot:
             logger__.warning("Update does not contain Message", stack_info=True)
             return
 
-        # Get the audio file
-        file = update.message.audio or update.message.voice
+        try:
+            # Get the audio file
+            file = update.message.audio or update.message.voice
 
-        # Check if an audio has been uploaded
-        if file is None:
-            await update.message.reply_text(
-                bot_replies.ATTACHEMENT_DENIED, reply_to_message_id=update.message.id
-            )
-            return
+            # Check if an audio has been uploaded
+            if file is None:
+                await update.message.reply_text(
+                    bot_replies.ATTACHEMENT_DENIED, reply_to_message_id=update.message.id
+                )
+                return
 
-        # Start the file download
-        file_info_await = context.bot.get_file(file.file_id)
+            file_info = await context.bot.get_file(file.file_id)
 
-        if update.message.audio:
-            # If file is an audio file
-            file_name = update.message.audio.file_name
-        else:
-            # If file is a voice message
-            file_name = "voice.ogg"
+            if update.message.audio:
+                # If file is an audio file
+                file_name = update.message.audio.file_name
+            else:
+                # If file is a voice message
+                file_name = "voice.ogg"
 
-        if file_name is None:
-            await update.message.reply_text(
-                bot_replies.ATTACHEMENT_DENIED, reply_to_message_id=update.message.id
-            )
-            return
+            if file_name is None:
+                await update.message.reply_text(
+                    bot_replies.ATTACHEMENT_DENIED, reply_to_message_id=update.message.id
+                )
+                return
 
-        # Check if file extension is supported
-        file_ext = file_name[file_name.rfind(".") :]
-        if file_ext not in ALLOWED_EXTENSIONS:
-            await update.message.reply_text(
-                f"{bot_replies.ATTACHEMENT_DENIED}{file_ext}", reply_to_message_id=update.message.id
-            )
-            return
+            # Check if file extension is supported
+            file_ext = file_name[file_name.rfind(".") :]
+            if file_ext not in ALLOWED_EXTENSIONS:
+                await update.message.reply_text(
+                    f"{bot_replies.ATTACHEMENT_DENIED}{file_ext}", reply_to_message_id=update.message.id
+                )
+                return
 
-        # Get sender's username
-        if update.message.from_user:
-            username = update.message.from_user.username
-
-        # Make username anonymous if no username was found
-        if username is None:
-            username = "Anonymous"
-
-        # Make the new file name
-        new_file_name = f"tg@{username}_{int(getTime())}{file_ext}"
-
-        # Wait for file info to be received
-        file_info: File = await file_info_await
-
-        # Reply to the user that his audio has been received
-        reply_await = update.message.reply_text(
-            bot_replies.REVIEW_ACCEPTED, reply_to_message_id=update.message.id
-        )
-
-        # Download the file
-        file_path = TELEGRAM_AUDIO_DIR / new_file_name
-        await file_info.download_to_drive(file_path.absolute().as_posix())
-
-        with self.__results_lock:
-            self.__result_uuids[self.__review_pipe.queue_audio(file_path)] = (
-                file_path,
-                update.message,
+            # Reply to the user that his audio has been received
+            reply_await = update.message.reply_text(
+                bot_replies.REVIEW_ACCEPTED, reply_to_message_id=update.message.id
             )
 
-        await reply_await
+            # Get sender's username
+            if update.message.from_user:
+                username = update.message.from_user.username
+
+            # Make username anonymous if no username was found
+            if username is None:
+                username = "Anonymous"
+
+            # Make the new file name
+            new_file_name = f"tg@{username}_{int(getTime())}{file_ext}"
+
+            # Download the file
+            file_path = TELEGRAM_AUDIO_DIR / new_file_name
+            await file_info.download_to_drive(file_path.absolute().as_posix())
+
+            with self.__results_lock:
+                self.__result_uuids[self.__review_pipe.queue_audio(file_path)] = (
+                    file_path,
+                    update.message,
+                )
+
+            await reply_await
+        
+        except error.TimedOut or error.NetworkError as ex:
+            logger__.error(f"Timeout: {ex}:\n{traceback.format_exc}")
+            await update.message.reply_text(bot_replies.RETREIVE_ERROR)
 
     async def __handle_text(self, update: Update, context: CallbackContext):
         if update.message is None:

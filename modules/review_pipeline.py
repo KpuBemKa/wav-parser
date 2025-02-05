@@ -3,6 +3,7 @@ from time import sleep, time as getTime
 from logging import getLogger
 from uuid import uuid4 as generateUUID4, UUID
 from multiprocessing import Lock, Queue
+from traceback import format_exc
 
 # from .review_strategy import ReviewStrategy
 from modules.ais.audio_transcriber import AudioTranscriber
@@ -55,25 +56,33 @@ class ReviewPipeline:
             #         return _result
 
     def thread_executor(self) -> None:
-        AudioTranscriber()
-        ReviewAnalizer()
+        try:
+            AudioTranscriber()
+            ReviewAnalizer()
+        except Exception as ex:
+            logger.error(f"Failed to start AIs: {ex}\n{format_exc}")
 
         while True:
-            if not self.__audio_queue.empty():
-                (uuid, audio_path) = self.__audio_queue.get()
-                result = self.__handle_audio(audio_path)
+            try:
+                if not self.__audio_queue.empty():
+                    (uuid, audio_path) = self.__audio_queue.get()
+                    result = self.__handle_audio(audio_path)
 
-                with self.__results_lock:
-                    self.__result_list[uuid] = result
+                    with self.__results_lock:
+                        self.__result_list[uuid] = result
 
-            if not self.__text_queue.empty():
-                (uuid, text_review) = self.__text_queue.get()
-                result = self.__handle_text(text_review)
+                if not self.__text_queue.empty():
+                    (uuid, text_review) = self.__text_queue.get()
+                    result = self.__handle_text(text_review)
 
-                with self.__results_lock:
-                    self.__result_list[uuid] = result
+                    with self.__results_lock:
+                        self.__result_list[uuid] = result
 
-            sleep(1)
+                sleep(1)
+            except KeyboardInterrupt as ex:
+                raise ex
+            except Exception as ex:
+                logger.error(f"{ex}\n{format_exc()}")
 
     def __handle_audio(self, audio_path: Path) -> ReviewResult:
         start_time = getTime()

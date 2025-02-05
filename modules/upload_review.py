@@ -42,16 +42,16 @@ def upload_review(
     logger.debug(
         f"Uploading to {ODOO_UPLOAD_ENDPOINT}:\n{data}\n---\nWith file: {audio_review_path}"
     )
-    # return True
+    return True
 
-    # Send the POST request
-    response = requests.post(ODOO_UPLOAD_ENDPOINT, headers=headers, data=data, files=files)
+    # # Send the POST request
+    # response = requests.post(ODOO_UPLOAD_ENDPOINT, headers=headers, data=data, files=files)
 
-    if response.status_code == 200:
-        logger.info("A review has been successfuly uploaded to the remote enpoint")
-        return True
-    else:
-        logger.error(
-            f"A review upload has failed: {response.status_code} | Text:\n{response.text}"
-        )
-        return False
+    # if response.status_code == 200:
+    #     logger.info("A review has been successfuly uploaded to the remote enpoint")
+    #     return True
+    # else:
+    #     logger.error(
+    #         f"A review upload has failed: {response.status_code} | Text:\n{response.text}"
+    #     )
+    #     return False
