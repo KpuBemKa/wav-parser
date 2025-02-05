@@ -101,7 +101,8 @@ class TelegramBot:
             file_ext = file_name[file_name.rfind(".") :]
             if file_ext not in ALLOWED_EXTENSIONS:
                 await update.message.reply_text(
-                    f"{bot_replies.ATTACHEMENT_DENIED}{file_ext}", reply_to_message_id=update.message.id
+                    f"{bot_replies.ATTACHEMENT_DENIED}{file_ext}",
+                    reply_to_message_id=update.message.id,
                 )
                 return
 
@@ -132,10 +133,12 @@ class TelegramBot:
                 )
 
             await reply_await
-        
+
         except error.TimedOut or error.NetworkError as ex:
             logger__.error(f"Timeout: {ex}:\n{traceback.format_exc()}")
-            await update.message.reply_text(bot_replies.RETRIEVE_ERROR)
+            await update.message.reply_text(
+                bot_replies.RETRIEVE_ERROR, reply_to_message_id=update.message.id
+            )
 
     async def __handle_text(self, update: Update, context: CallbackContext):
         if update.message is None:
