@@ -30,10 +30,17 @@ from keys import TELEGRAM_BOT_TOKEN
 logger__ = getLogger(LOGGER_NAME)
 
 
+class QueueItem:
+    def __init__(self, audio_path: Path, user_message: Message, bot_message: Message) -> None:
+        self.audio_path = audio_path
+        self.user_message = user_message
+        self.bot_message = bot_message
+
+
 class TelegramBot:
     def __init__(self, review_pipeline: ReviewPipeline):
         self.__review_pipe = review_pipeline
-        self.__result_uuids: dict[UUID, tuple[Path, Message]] = {}
+        self.__result_uuids: dict[UUID, QueueItem] = {}
         self.__results_lock = Lock()
         self.__thread = Thread(target=self.__review_result_watcher, daemon=True)
 
@@ -43,27 +50,29 @@ class TelegramBot:
         """Starts the Telegram bot in a blocking manner"""
 
         # Initialize Application instead of Updater
-        application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+        self.__application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
         # Add handlers
-        application.add_handler(CommandHandler("start", self.__start))
+        self.__application.add_handler(CommandHandler("start", self.__start))
         # application.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, __handle_audio))
-        application.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, self.__handle_audio))
-        application.add_handler(MessageHandler(filters.TEXT, self.__handle_text))
+        self.__application.add_handler(
+            MessageHandler(filters.VOICE | filters.AUDIO, self.__handle_audio)
+        )
+        self.__application.add_handler(MessageHandler(filters.TEXT, self.__handle_text))
 
-        application.add_error_handler(self.__error_handler)
+        self.__application.add_error_handler(self.__error_handler)
 
         logger__.info("Telegram bot has been started.")
 
         # Start polling the bot
-        application.run_polling()
+        self.__application.run_polling()
 
     async def __start(self, update: Update, context: CallbackContext):
         if update.message is None:
             logger__.warning("Update does not contain Message", stack_info=True)
             return
 
-        with open(bot_replies.START_ATTACHEMENT_PATH, "rb") as image:
+        with open(bot_replies.ATTACHEMENT_PATH_START, "rb") as image:
             await update.message.reply_photo(image, caption=bot_replies.START_REPLY)
 
     async def __handle_audio(self, update: Update, context: CallbackContext):
@@ -107,7 +116,7 @@ class TelegramBot:
                 return
 
             # Reply to the user that his audio has been received
-            reply_await = update.message.reply_text(
+            reply_message = await update.message.reply_text(
                 bot_replies.REVIEW_ACCEPTED, reply_to_message_id=update.message.id
             )
 
@@ -127,12 +136,9 @@ class TelegramBot:
             await file_info.download_to_drive(file_path.absolute().as_posix())
 
             with self.__results_lock:
-                self.__result_uuids[self.__review_pipe.queue_audio(file_path)] = (
-                    file_path,
-                    update.message,
+                self.__result_uuids[self.__review_pipe.queue_audio(file_path)] = QueueItem(
+                    audio_path=file_path, user_message=update.message, bot_message=reply_message
                 )
-
-            await reply_await
 
         except error.TimedOut or error.NetworkError as ex:
             logger__.error(f"Timeout: {ex}:\n{traceback.format_exc()}")
@@ -150,7 +156,7 @@ class TelegramBot:
             return
 
         # Reply to the user that his audio has been received
-        reply_await = update.message.reply_text(
+        reply_message = await update.message.reply_text(
             bot_replies.REVIEW_ACCEPTED, reply_to_message_id=update.message.id
         )
 
@@ -163,46 +169,11 @@ class TelegramBot:
             username = "Anonymous"
 
         with self.__results_lock:
-            self.__result_uuids[self.__review_pipe.queue_text(update.message.text)] = (
-                Path(f"tg@{username}_{int(getTime())}.txt"),
-                update.message,
+            self.__result_uuids[self.__review_pipe.queue_text(update.message.text)] = QueueItem(
+                audio_path=Path(f"tg@{username}_{int(getTime())}.txt"),
+                user_message=update.message,
+                bot_message=reply_message,
             )
-
-        await reply_await
-
-        # (_, review_result) = await asyncio.gather(reply_await, result_await)
-
-        # # Transcribe it, and upload it
-        # result_await = self.__wait_for_result(self.__review_pipe.queue_text(update.message.text))
-
-        # (_, review_result) = asyncio.gather(reply_await, result_await)
-
-        # await self.__handle_review_result(update.message, review_result)
-
-    def __review_result_watcher(self):
-        while True:
-            time.sleep(5)
-
-            uuids: list[tuple[UUID, ReviewResult]] = []
-
-            with self.__results_lock:
-                for _uuid in self.__result_uuids:
-                    review_result = self.__review_pipe.get_result_by_uuid(_uuid)
-
-                    if review_result is not None:
-                        uuids.append((_uuid, review_result))
-
-            loop = asyncio.new_event_loop()
-            for _uuid, _review_result in uuids:
-                loop.run_until_complete(
-                    self.__handle_review_result(
-                        user_message=self.__result_uuids[_uuid][1],
-                        review_result=_review_result,
-                        audio_path=self.__result_uuids[_uuid][0],
-                    )
-                )
-
-                self.__result_uuids.pop(_uuid)
 
     async def __error_handler(self, update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Log the error and send a telegram message to notify the developer."""
@@ -234,32 +205,70 @@ class TelegramBot:
         #     chat_id=DEVELOPER_CHAT_ID, text=message, parse_mode=ParseMode.HTML
         # )
 
-    async def __handle_review_result(
-        self,
-        user_message: Message,
-        review_result: ReviewResult,
-        audio_path: Path,
-    ):
+    def __review_result_watcher(self):
+        while True:
+            time.sleep(5)
+
+            uuids: list[tuple[UUID, ReviewResult]] = []
+
+            with self.__results_lock:
+                for _uuid in self.__result_uuids:
+                    review_result = self.__review_pipe.get_result_by_uuid(_uuid)
+
+                    if review_result is not None:
+                        uuids.append((_uuid, review_result))
+
+            loop = asyncio.new_event_loop()
+            for _uuid, _review_result in uuids:
+                loop.run_until_complete(
+                    self.__handle_review_result(
+                        review_result=_review_result, queue_item=self.__result_uuids[_uuid]
+                    )
+                )
+
+                self.__result_uuids.pop(_uuid)
+
+    async def __handle_review_result(self, review_result: ReviewResult, queue_item: QueueItem):
         if not review_result.completed:
-            await user_message.reply_text(
-                bot_replies.TRANSCRIPTION_ERROR, reply_to_message_id=user_message.id
+            await self.__reply_and_delete(
+                text_message=bot_replies.TRANSCRIPTION_ERROR,
+                reply_message=queue_item.user_message,
+                delete_message=queue_item.bot_message,
             )
             return
 
         if not upload_review(
-            audio_review_path=audio_path,
+            audio_review_path=queue_item.audio_path,
             text_review=review_result.corrected_text,
             text_summary=review_result.summary,
             issues=review_result.issues,
         ):
-            await user_message.reply_text(
-                bot_replies.UPLOAD_ERROR, reply_to_message_id=user_message.id
+            await self.__reply_and_delete(
+                text_message=bot_replies.UPLOAD_ERROR,
+                reply_message=queue_item.user_message,
+                delete_message=queue_item.bot_message,
             )
             return
 
-        await user_message.reply_text(
-            self.__issues_to_text(review_result.issues), reply_to_message_id=user_message.id
+        await self.__reply_and_delete(
+            text_message=self.__issues_to_text(review_result.issues),
+            reply_message=queue_item.user_message,
+            delete_message=queue_item.bot_message,
         )
+        
+        with open(bot_replies.ATTACHEMENT_PATH_QR_REWARD, "rb") as image:
+            await queue_item.user_message.reply_photo(image)
+
+    async def __reply_and_delete(
+        self, text_message: str, reply_message: Message, delete_message: Message
+    ):
+        await_reply = reply_message.reply_text(text_message, reply_to_message_id=reply_message.id)
+
+        await_delete = self.__application.bot.delete_message(
+            chat_id=delete_message.chat_id, message_id=delete_message.id
+        )
+
+        return await asyncio.gather(await_reply, await_delete)
 
     def __issues_to_text(self, issues: list[Issue]) -> str:
         if len(issues) == 0:

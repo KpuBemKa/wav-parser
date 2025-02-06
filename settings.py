@@ -38,7 +38,7 @@ CORRECTION_PROMPT = (
     "Fixing grammar and spelling errors. "
     "Improving punctuation and sentence structure. "
     "Preserving the original meaning. "
-    "Please provide the corrected version of the text in a clear, coherent format. "
+    "Give me the corrected text wihout any additional text, headers, or phrases in a clear, coherent format. "
     
     #"I will give you a review for a restaurant. "
     #"I want you to correct the original text of any errors or typos. "
@@ -94,7 +94,7 @@ ISSUES_DEPARTMENTS_PROMPT = (
     "Kitchen: For issues related to food quality, taste, temperature, preparation, or presentation. "
     "Floor: For issues related to staff behavior, attentiveness, wait times, table service, and overall customer mood. "
     "Bar: For issues related to drinks, bartending, cocktails, or bar-specific service. "
-    "Other: For feedback that does not clearly fit into any of the above categories. "
+    "Other: For feedback thыat does not clearly fit into any of the above categories. "
     "Give me the result wihout any additional text, headers, or phrases. "
     "Here is the issue: "
 )

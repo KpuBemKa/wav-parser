@@ -32,7 +32,11 @@ class ReviewAnalizer(metaclass=SingletonMeta):
             summarry = self.__get_summary(corrected_text)
             issues = self.__get_issues(corrected_text)
 
-            return ReviewResult(corrected_text, summarry, issues)
+            return ReviewResult(
+                self.__normalize_text(corrected_text),
+                self.__normalize_text(summarry),
+                issues,
+            )
         except Exception as ex:
             logger.error(
                 f"Exception catched durint audio transcription: {ex} {ex.args}\n{format_exc()}"
