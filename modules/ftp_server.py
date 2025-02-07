@@ -76,7 +76,7 @@ class CustomProtocolFTP(FTP):
     def __handle_review_result(
         self,
         review_result: ReviewResult,
-        audio_path: Path | None = None,
+        audio_path: Path,
     ):
         if not review_result.completed:
             logger.error("Review result was not completed. Perhaps an error occured.")

@@ -1,9 +1,9 @@
 from pathlib import Path
-from logging import DEBUG as logging_DEBUG
+from logging import DEBUG as LOGGING_DEBUG
 # from logging import INFO as loggin_INFO
 
 # LOG_LEVEL = loggin_INFO
-LOG_LEVEL = logging_DEBUG
+LOG_LEVEL = LOGGING_DEBUG
 LOGGER_NAME = "logging"
 
 # log message format
